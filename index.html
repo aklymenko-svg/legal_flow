@@ -126,7 +126,22 @@
   .frow>label{font-size:12.5px;color:var(--muted);font-weight:700;padding-top:10px}
   .frow.bad input,.frow.bad select,.frow.bad textarea,.frow.bad .btn{border-color:var(--red)}
   .mbar{display:none}
-  @media(max-width:1100px){.kpis{grid-template-columns:repeat(3,minmax(0,1fr))}.grid-main{grid-template-columns:1fr}.filters{grid-template-columns:repeat(2,minmax(0,1fr))}}
+  .ph{border-radius:6px;padding:1px 4px;font-weight:700;font-style:normal}
+  .ph.f{background:#EEF2FF;color:#4338CA}.ph.c{background:#FEF3C7;color:#B45309}.ph.s{background:#CCFBF1;color:#0F766E}.ph.x{background:#FEE2E2;color:#B91C1C}
+  .docx-box{position:relative;overflow:auto;border:1px solid var(--line);border-radius:12px;background:#EEF0F5;min-height:160px}
+  .docx-box .docx-wrapper{background:#EEF0F5 !important;padding:16px !important}
+  .docx-box .docx-wrapper>section.docx{box-shadow:0 2px 10px rgba(31,41,55,.12) !important;margin-bottom:16px !important}
+  .docx-busy{position:absolute;top:12px;left:12px;background:#fff;border:1px solid var(--line);border-radius:10px;padding:6px 10px;font-size:13px;display:flex;gap:8px;align-items:center}
+  .mrow{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.35fr);gap:8px;align-items:start;padding:8px 0;border-top:1px solid var(--line-2)}
+  .mrow:first-child{border-top:0} .mrow .mtag{padding-top:6px;word-break:break-all;font-size:13px}
+  .mrow .mctl{display:flex;flex-direction:column;gap:6px}
+  .mrow select,.mrow textarea{width:100%;padding:7px 9px;border:1px solid var(--line);border-radius:9px;font-size:13px;font-family:inherit;background:#FBFBFE}
+  .mrow.bad select{border-color:var(--red)}
+  .dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-left:2px;vertical-align:middle}
+  .dot.active{background:var(--green)}.dot.draft{background:var(--amber)}.dot.archived{background:var(--muted-2)}
+  .okstep{color:var(--green-t);font-weight:600;font-size:13px}.nostep{color:var(--amber-t);font-weight:600;font-size:13px}
+  .checklist{border:1px solid var(--line);border-radius:10px;padding:6px 10px;overflow:auto;background:#FBFBFE}
+  @media(max-width:1100px){.kpis{grid-template-columns:repeat(3,minmax(0,1fr))}.grid-main{grid-template-columns:minmax(0,1fr)}.filters{grid-template-columns:repeat(2,minmax(0,1fr))}}
   @media(max-width:820px){.app{grid-template-columns:1fr}.side{position:fixed;left:-260px;width:250px;transition:.2s;z-index:70}.side.open{left:0}
     .main{padding:0 14px 60px}.kpis{grid-template-columns:1fr 1fr}.frow{grid-template-columns:1fr;gap:4px}.frow>label{padding-top:0}.row2,.row3,.filters{grid-template-columns:1fr}.kv{grid-template-columns:1fr;gap:4px}
     .mbar{display:flex;align-items:center;gap:8px;position:sticky;top:0;z-index:40;background:#fff;border-bottom:1px solid var(--line);margin:0 -14px 16px;padding:8px 12px}
@@ -148,7 +163,7 @@ import htm from 'https://esm.sh/htm@3.1.1';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
 
 const html = htm.bind(h);
-const APP_VERSION = '2.0 · етап 1 · 25.09.2026';   // міняти при кожному оновленні: видно в меню і на екрані входу
+const APP_VERSION = '2.1 · етап 2 · 25.09.2026';   // міняти при кожному оновленні: видно в меню і на екрані входу
 const CFG = window.APP_CONFIG || {};
 const cfgOk = !!(CFG.SUPABASE_URL && CFG.SUPABASE_ANON_KEY && !/ВАШ/.test(CFG.SUPABASE_URL + CFG.SUPABASE_ANON_KEY));
 const sb = cfgOk ? createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY) : null;
@@ -318,13 +333,14 @@ const Ctx = createContext(null);
 const useCtx = () => useContext(Ctx);
 async function loadDicts(){
   const q = (t, sel, ord) => sb.from(t).select(sel).order(ord);
-  const [pr,cat,lf,ct,dt,us] = await Promise.all([
+  const [pr,cat,lf,ct,dt,us,org] = await Promise.all([
     q('projects','*','full_name'), q('counterparty_categories','*','prefix'), q('legal_forms','*','short'),
     q('contract_types','*','name'), q('document_types','*','name'), q('profiles','id,email,full_name,role,active','email'),
+    sb.from('org_settings').select('data').eq('id',1).maybeSingle(),
   ]);
-  const err=[pr,cat,lf,ct,dt,us].find(x=>x.error); if(err) throw err.error;
+  const err=[pr,cat,lf,ct,dt,us,org].find(x=>x.error); if(err) throw err.error;
   const by = a => Object.fromEntries(a.map(x=>[x.id,x]));
-  return {projects:pr.data, categories:cat.data, forms:lf.data, types:ct.data, docTypes:dt.data, users:us.data,
+  return {projects:pr.data, categories:cat.data, forms:lf.data, types:ct.data, docTypes:dt.data, users:us.data, org:(org.data&&org.data.data)||{},
           projectsBy:by(pr.data), categoriesBy:by(cat.data), formsBy:by(lf.data), typesBy:by(ct.data), usersBy:by(us.data)};
 }
 const projectLabel = p => p ? (p.short_code ? p.short_code+' — '+p.full_name : p.full_name) : '';
@@ -496,7 +512,6 @@ function NoAccess({session,onRetry}){
 
 const SOON = {
   mass: {t:'Масове контрактування', stage:3, text:'Майстер для тисяч однотипних договорів: Excel → перевірка й дедуплікація → нумерація → попередній перегляд → формування → Вчасно. Кожен пакет зберігається і стає панеллю контролю підписання.'},
-  templates: {t:'Шаблони', stage:2, text:'DOCX-шаблони зі змінними {{contract_number}}, {{contractor_name}} тощо, версії v1/v2, тест і активація. Договір завжди прив’язаний до конкретної версії шаблону.'},
   archive: {t:'Архів', stage:5, text:'Фінальні підписані версії, ZIP із КЕП, метадані й зв’язки з додатковими угодами.'},
 };
 function Placeholder({k}){
@@ -529,7 +544,8 @@ function Shell({session}){
   const ctx={session, me, role, d, reloadDicts, reloadMe:loadMe};
   let content;
   if(sec==='home') content=html`<${Dashboard}/>`;
-  else if(sec==='contracts') content = id==='new' ? html`<${NewContract} key=${'new'+(route.query.cp||'')} cpId=${route.query.cp}/>` : id ? html`<${ContractPage} key=${id} id=${id} tab=${route.query.tab||'overview'}/>` : html`<${Registry} query=${route.query}/>`;
+  else if(sec==='contracts') content = id==='new' ? html`<${NewContract} key=${'new'+(route.query.cp||'')} cpId=${route.query.cp}/>` : id ? html`<${ContractPage} key=${id} id=${id} tab=${route.query.tab||'overview'} gen=${route.query.gen}/>` : html`<${Registry} query=${route.query}/>`;
+  else if(sec==='templates' && can(role,'legal')) content = id ? html`<${TemplatePage} key=${id} id=${id} vq=${route.query.v}/>` : html`<${TemplatesList}/>`;
   else if(sec==='counterparties') content = id ? html`<${CounterpartyPage} key=${id} id=${id} tab=${route.query.tab||'main'}/>` : html`<${CounterpartyList}/>`;
   else if(sec==='libraries' && can(role,'legal')) content=html`<${Libraries} tab=${route.query.tab||'projects'}/>`;
   else if(sec==='settings') content=html`<${Settings} tab=${route.query.tab||'profile'}/>`;
@@ -605,6 +621,386 @@ function Dashboard(){
         </div>
       </div>
     </div>`;
+}
+
+/* ---- docgen: шаблони DOCX, поля, генерація ---- */
+const DOCGEN_URLS = { dt:'https://esm.sh/docxtemplater@3.71.0', pz:'https://esm.sh/pizzip@3.3.0', pv:'https://esm.sh/docx-preview@0.4.1' };
+let _docgen = null, _docxPreview = null;
+const loadDocgen = async () => {
+  if(!_docgen){ const [a,b] = await Promise.all([import(DOCGEN_URLS.dt), import(DOCGEN_URLS.pz)]); _docgen = { Docxtemplater:a.default||a, PizZip:b.default||b }; }
+  return _docgen;
+};
+const loadDocxPreview = async () => (_docxPreview = _docxPreview || await import(DOCGEN_URLS.pv));
+const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+const DOC_PARTS = /^word\/(document|header\d*|footer\d*|footnotes|endnotes)\.xml$/;
+const DT_OPTS = { delimiters:{start:'{{', end:'}}'}, paragraphLoop:true, linebreaks:true, errorLogging:false };
+
+/* ---- тексти для документів ---- */
+const MONTHS_GEN = ['січня','лютого','березня','квітня','травня','червня','липня','серпня','вересня','жовтня','листопада','грудня'];
+const dateTextUA = d => d ? `«${d.slice(8,10)}» ${MONTHS_GEN[+d.slice(5,7)-1]} ${d.slice(0,4)} р.` : '';
+const fmtAmountDoc = v => { if(v==null||v==='') return ''; const n=Number(v); const [i,f]=Math.abs(n).toFixed(2).split('.'); return (n<0?'-':'')+i.replace(/\B(?=(\d{3})+(?!\d))/g,' ')+','+f; };
+const CUR_DOC = {
+  UAH:{short:'грн', main:['гривня','гривні','гривень'], fem:true, sub:['копійка','копійки','копійок'], subFem:true},
+  USD:{short:'дол. США', main:['долар США','долари США','доларів США'], fem:false, sub:['цент','центи','центів'], subFem:false},
+  EUR:{short:'євро', main:['євро','євро','євро'], fem:false, sub:['цент','центи','центів'], subFem:false},
+};
+function numWordsUA(n, fem){
+  n = Math.floor(Math.abs(n)); if(n===0) return 'нуль';
+  const U=['','один','два','три','чотири','п’ять','шість','сім','вісім','дев’ять'], UF=['','одна','дві','три','чотири','п’ять','шість','сім','вісім','дев’ять'];
+  const T=['десять','одинадцять','дванадцять','тринадцять','чотирнадцять','п’ятнадцять','шістнадцять','сімнадцять','вісімнадцять','дев’ятнадцять'];
+  const D=['','','двадцять','тридцять','сорок','п’ятдесят','шістдесят','сімдесят','вісімдесят','дев’яносто'];
+  const H=['','сто','двісті','триста','чотириста','п’ятсот','шістсот','сімсот','вісімсот','дев’ятсот'];
+  const tri=(x,f)=>{ const h=Math.floor(x/100), r=x%100, t=Math.floor(r/10), u=r%10, w=[]; if(h) w.push(H[h]); if(r>=10&&r<20) w.push(T[r-10]); else { if(t) w.push(D[t]); if(u) w.push((f?UF:U)[u]); } return w.join(' '); };
+  const sc=[[null,fem],[['тисяча','тисячі','тисяч'],true],[['мільйон','мільйони','мільйонів'],false],[['мільярд','мільярди','мільярдів'],false],[['трильйон','трильйони','трильйонів'],false]];
+  const out=[]; let i=0;
+  while(n>0 && i<sc.length){ const x=n%1000; if(x){ const [forms,f]=sc[i]; const w=tri(x,f); out.unshift(forms ? w+' '+plural(x,...forms) : w); } n=Math.floor(n/1000); i++; }
+  return out.join(' ');
+}
+function amountWordsUA(v, cur){
+  if(v==null||v==='') return '';
+  const c=CUR_DOC[cur]||CUR_DOC.UAH, n=Math.round(Math.abs(Number(v))*100), int=Math.floor(n/100), k=n%100;
+  return `${numWordsUA(int,c.fem)} ${plural(int,...c.main)} ${String(k).padStart(2,'0')} ${plural(k,...c.sub)}`;
+}
+function termTextUA(c){
+  const s=c.start_date, e=c.indefinite?null:c.end_date;
+  if(c.indefinite) return s ? `з ${dateTextUA(s)} безстроково` : 'безстроково';
+  if(s&&e) return `з ${dateTextUA(s)} по ${dateTextUA(e)}`;
+  if(e) return `по ${dateTextUA(e)}`;
+  return s ? `з ${dateTextUA(s)}` : '';
+}
+// «Петренко Іван Іванович» → «Іван ПЕТРЕНКО» (підпис)
+function signName(full){
+  const p=String(full||'').replace(/^\s*(ФОП|ФО|фізична особа-підприємець|фізична особа)\s+/i,'').trim().split(/\s+/).filter(Boolean);
+  if(!p.length) return ''; if(p.length===1) return p[0].toUpperCase();
+  return p[1]+' '+p[0].toUpperCase();
+}
+function cpKind(cp, lf){
+  if(lf){ if(/^ФОП$/i.test(lf.short||'')) return 'fop'; return lf.person ? 'person' : 'company'; }
+  if(/^\s*ФОП\s/i.test(cp.name||'')) return 'fop';
+  const t=String(cp.tax_id||'').replace(/\D/g,'');
+  if(t.length===10) return 'person'; if(t.length===8) return 'company';
+  return cp.kind==='person' ? 'person' : 'company';
+}
+const CP_KINDS = {any:'будь-який', fop:'ФОП', person:'фізична особа (ЦПХ)', company:'юридична особа'};
+const AMOUNT_DOC = {fixed:'фіксована', max:'гранична', none:'без визначеної суми'};
+const detailsBlock = rows => rows.filter(([l,v])=>v!=null&&String(v).trim()!=='').map(([l,v])=>l?`${l}: ${String(v).trim()}`:String(v).trim()).join('\n');
+
+/* ---- довідник полів шаблону ---- */
+const TPL_GROUPS = ['Договір','Сума і строк','Контрагент','Фонд','Проєкт і юрист'];
+const TPL_FIELDS = [
+  {k:'contract_number', g:0, l:'Номер договору', get:d=>d.c.number},
+  {k:'contract_date', g:0, l:'Дата договору (25.09.2026)', get:d=>fmtDate(d.c.contract_date)},
+  {k:'contract_date_text', g:0, l:'Дата договору: «25» вересня 2026 р.', get:d=>dateTextUA(d.c.contract_date)},
+  {k:'contract_city', g:0, l:'Місто укладення', a:['city'], get:d=>d.org.city},
+  {k:'contract_type', g:0, l:'Тип договору', get:d=>d.typeName},
+  {k:'contract_title', g:0, l:'Коротка назва договору', a:['title'], get:d=>d.c.title},
+  {k:'subject', g:0, l:'Предмет договору (повний текст)', block:true, a:['contract_subject','subject_text'], get:d=>d.c.subject || (d.subj&&d.subj.body) || ''},
+  {k:'subject_name', g:0, l:'Назва предмета з бібліотеки', get:d=>d.subj&&d.subj.name},
+  {k:'role_title', g:0, l:'Роль / посада виконавця', a:['subject_role','position'], get:d=>d.subj&&d.subj.role_title},
+  {k:'worksection_url', g:0, l:'Посилання на задачу Worksection', get:d=>d.c.worksection_url},
+  {k:'amount', g:1, l:'Сума цифрами: 15 000,00', get:d=>fmtAmountDoc(d.c.amount)},
+  {k:'amount_words', g:1, l:'Сума прописом', get:d=>amountWordsUA(d.c.amount, d.c.currency_code)},
+  {k:'amount_full', g:1, l:'15 000,00 грн (п’ятнадцять тисяч гривень 00 копійок)', get:d=>d.c.amount==null||d.c.amount===''?'':`${fmtAmountDoc(d.c.amount)} ${(CUR_DOC[d.c.currency_code]||{short:d.c.currency_code}).short} (${amountWordsUA(d.c.amount,d.c.currency_code)})`},
+  {k:'currency', g:1, l:'Валюта: грн / дол. США / євро', get:d=>(CUR_DOC[d.c.currency_code]||{short:d.c.currency_code||''}).short},
+  {k:'currency_code', g:1, l:'Код валюти: UAH', get:d=>d.c.currency_code},
+  {k:'amount_type', g:1, l:'Тип суми: фіксована / гранична', get:d=>AMOUNT_DOC[d.c.amount_type]},
+  {k:'start_date', g:1, l:'Початок дії (01.10.2026)', get:d=>fmtDate(d.c.start_date)},
+  {k:'start_date_text', g:1, l:'Початок дії: «01» жовтня 2026 р.', get:d=>dateTextUA(d.c.start_date)},
+  {k:'end_date', g:1, l:'Завершення дії (31.12.2026)', get:d=>d.c.indefinite?'':fmtDate(d.c.end_date)},
+  {k:'end_date_text', g:1, l:'Завершення: «31» грудня 2026 р.', get:d=>d.c.indefinite?'':dateTextUA(d.c.end_date)},
+  {k:'term_text', g:1, l:'Строк дії текстом: з … по …', get:d=>termTextUA(d.c)},
+  {k:'contractor_name', g:2, l:'Назва / ПІБ контрагента', get:d=>d.cp.name},
+  {k:'contractor_name_latin', g:2, l:'Назва латиницею', get:d=>d.cp.name_latin},
+  {k:'contractor_sign', g:2, l:'Підпис: Іван ПЕТРЕНКО', a:['contractor_short'], get:d=>d.kind==='company' ? d.cp.signatory_short : signName(d.cp.name)},
+  {k:'contractor_legal_form', g:2, l:'Організаційно-правова форма', get:d=>d.lf&&d.lf.name},
+  {k:'contractor_legal_form_short', g:2, l:'ОПФ скорочено (ТОВ, ФОП)', get:d=>d.lf&&d.lf.short},
+  {k:'tax_id', g:2, l:'ЄДРПОУ / РНОКПП', a:['contractor_tax_id','edrpou','rnokpp'], get:d=>d.cp.tax_id},
+  {k:'tax_id_label', g:2, l:'«Код ЄДРПОУ» або «РНОКПП»', get:d=>d.kind==='company'?'Код ЄДРПОУ':'РНОКПП'},
+  {k:'contractor_address', g:2, l:'Адреса', a:['address'], get:d=>d.cp.address},
+  {k:'contractor_iban', g:2, l:'IBAN', a:['iban'], get:d=>d.cp.iban},
+  {k:'contractor_bank', g:2, l:'Банк', a:['bank','bank_name'], get:d=>d.cp.bank_name},
+  {k:'contractor_email', g:2, l:'E-mail', a:['email'], get:d=>d.cp.email},
+  {k:'contractor_phone', g:2, l:'Телефон', a:['phone'], get:d=>d.cp.phone},
+  {k:'fop_registration', g:2, l:'Дані реєстрації ФОП', a:['contractor_fop_registration'], get:d=>d.cp.fop_registration},
+  {k:'contractor_signatory_position', g:2, l:'Посада підписанта (родовий: директора)', get:d=>d.cp.signatory_position},
+  {k:'contractor_signatory_name', g:2, l:'ПІБ підписанта (родовий відмінок)', get:d=>d.cp.signatory_name},
+  {k:'contractor_signatory_basis', g:2, l:'Підстава повноважень (Статуту)', get:d=>d.cp.signatory_basis},
+  {k:'contractor_idx', g:2, l:'Індекс контрагента', get:d=>d.cp.idx},
+  {k:'contractor_details', g:2, l:'Реквізити контрагента блоком', block:true, a:['contractor_requisites'], get:d=>detailsBlock([
+    ['', d.cp.name], [d.kind==='company'?'Код ЄДРПОУ':'РНОКПП', d.cp.tax_id], ['', d.kind==='fop'?d.cp.fop_registration:''],
+    ['Адреса', d.cp.address], ['IBAN', [d.cp.iban, d.cp.bank_name].filter(Boolean).join(', ')], ['E-mail', d.cp.email], ['Тел.', d.cp.phone]])},
+  {k:'org_name', g:3, l:'Назва Фонду (коротка)', get:d=>d.org.org_name},
+  {k:'org_full_name', g:3, l:'Повна назва Фонду', get:d=>d.org.org_full_name||d.org.org_name},
+  {k:'org_edrpou', g:3, l:'Код ЄДРПОУ Фонду', get:d=>d.org.org_edrpou},
+  {k:'org_address', g:3, l:'Адреса Фонду', get:d=>d.org.org_address},
+  {k:'org_iban', g:3, l:'IBAN Фонду', get:d=>d.org.org_iban},
+  {k:'org_bank', g:3, l:'Банк Фонду', get:d=>d.org.org_bank},
+  {k:'org_email', g:3, l:'E-mail Фонду', get:d=>d.org.org_email},
+  {k:'org_phone', g:3, l:'Телефон Фонду', get:d=>d.org.org_phone},
+  {k:'org_signatory_position', g:3, l:'Посада підписанта Фонду (Директор)', get:d=>d.org.org_signatory_position},
+  {k:'org_signatory_position_gen', g:3, l:'Посада підписанта в родовому (Директора)', get:d=>d.org.org_signatory_position_gen},
+  {k:'org_signatory_name_gen', g:3, l:'ПІБ підписанта Фонду в родовому', get:d=>d.org.org_signatory_name_gen},
+  {k:'org_signatory_basis', g:3, l:'Підстава повноважень (Статуту)', get:d=>d.org.org_signatory_basis},
+  {k:'org_sign', g:3, l:'Підпис Фонду: Марія ІВАНОВА', a:['org_signatory_short'], get:d=>d.org.org_signatory_short},
+  {k:'org_details', g:3, l:'Реквізити Фонду блоком', block:true, a:['org_requisites'], get:d=>detailsBlock([
+    ['', d.org.org_full_name||d.org.org_name], ['Код ЄДРПОУ', d.org.org_edrpou], ['Адреса', d.org.org_address],
+    ['IBAN', [d.org.org_iban, d.org.org_bank].filter(Boolean).join(', ')], ['E-mail', d.org.org_email], ['Тел.', d.org.org_phone]])},
+  {k:'project', g:4, l:'Код проєкту (UNICEF#3)', a:['project_code'], get:d=>d.project.short_code},
+  {k:'project_name', g:4, l:'Повна назва проєкту', get:d=>d.project.full_name},
+  {k:'donor', g:4, l:'Донор', get:d=>d.project.donor},
+  {k:'lawyer_name', g:4, l:'Юрист (ПІБ)', get:d=>d.lawyerName},
+];
+const TPL_FIELD = Object.fromEntries(TPL_FIELDS.map(f=>[f.k,f]));
+const TPL_ALIAS = Object.fromEntries(TPL_FIELDS.flatMap(f=>[[f.k,f.k], ...(f.a||[]).map(a=>[a,f.k])]));
+const TPL_FLAGS = [
+  {k:'is_fop', l:'контрагент — ФОП'}, {k:'is_person', l:'фізична особа (не ФОП, ЦПХ)'}, {k:'is_company', l:'юридична особа'},
+  {k:'amount_fixed', l:'фіксована сума'}, {k:'amount_max', l:'гранична сума'}, {k:'amount_none', l:'без визначеної суми'},
+  {k:'has_amount', l:'сума вказана'}, {k:'indefinite', l:'безстроковий'}, {k:'has_end_date', l:'є дата завершення'},
+];
+const TPL_FLAG_SET = new Set(TPL_FLAGS.map(f=>f.k));
+const flagValue = (k, d) => ({is_fop:d.kind==='fop', is_person:d.kind==='person', is_company:d.kind==='company',
+  amount_fixed:d.c.amount_type==='fixed', amount_max:d.c.amount_type==='max', amount_none:d.c.amount_type==='none',
+  has_amount:d.c.amount!=null&&d.c.amount!==''&&d.c.amount_type!=='none', indefinite:!!d.c.indefinite,
+  has_end_date:!d.c.indefinite&&!!d.c.end_date})[k];
+
+const CLAUSE_CATS = {donor:'Донорські вимоги', safeguarding:'Safeguarding / захист дітей', anticorruption:'Антикорупція / anti-fraud',
+  confidentiality:'Конфіденційність', personal_data:'Персональні дані', payment:'Порядок оплати', other:'Інше'};
+const CAT_GUESS = [[/donor/,'donor'],[/safeguard|child|protect/,'safeguarding'],[/fraud|corrupt|antikor/,'anticorruption'],
+  [/confiden|nda/,'confidentiality'],[/personal|gdpr|pdata/,'personal_data'],[/pay|oplat/,'payment']];
+const MAP_TYPES = {field:'Поле', category:'Положення за категорією', clause:'Конкретне положення', text:'Текст', empty:'Порожньо'};
+
+// автозіставлення: відоме поле → поле; *_clause → категорія; код положення → положення
+function autoMapTag(name, clauses){
+  const n = String(name||'').trim(), lo = n.toLowerCase();
+  if(TPL_ALIAS[lo]) return {type:'field', field:TPL_ALIAS[lo]};
+  const up = n.toUpperCase();
+  if((clauses||[]).some(c=>c.code===up)) return {type:'clause', code:up};
+  if(/clause|polozh/.test(lo)){ const g = CAT_GUESS.find(([re])=>re.test(lo)); return {type:'category', category:g?g[1]:'other'}; }
+  return null;
+}
+function autoMapAll(placeholders, clauses, prev){
+  const m = {...(prev||{})};
+  for(const p of placeholders||[]){
+    if(p.prefix==='/' || m[p.name]) continue;
+    if((p.prefix==='#'||p.prefix==='^') && TPL_FLAG_SET.has(p.name)) continue;
+    const a = autoMapTag(p.name, clauses); if(a) m[p.name] = a;
+  }
+  return m;
+}
+// зіставлення заповнене: для поля — обране поле, для положення — код, для категорії — категорія
+const mapComplete = m => !!m && (m.type!=='field'||!!m.field) && (m.type!=='clause'||!!m.code) && (m.type!=='category'||!!m.category) && !!MAP_TYPES[m.type];
+const cleanMapping = m => Object.fromEntries(Object.entries(m||{}).filter(([k,v])=>mapComplete(v)));
+// які теги ще не зіставлені (ті самі правила, що й у publish_template_version)
+function unmappedTags(placeholders, mapping){
+  const out = [], mp = mapping||{};
+  for(const p of placeholders||[]){
+    if(p.prefix==='/') continue;
+    if(p.prefix==='#'||p.prefix==='^'){ if(!TPL_FLAG_SET.has(p.name) && !mapComplete(mp[p.name])) out.push(p.name); }
+    else if(!mapComplete(mp[p.name])) out.push(p.name);
+  }
+  return [...new Set(out)];
+}
+
+/* ---- дані для генерації ---- */
+function docContext({contract, cp, lf, project, org, subj, clauses, typeName, lawyerName}){
+  const c = contract||{}, k = cpKind(cp||{}, lf);
+  return { c, cp:cp||{}, lf:lf||null, kind:k, project:project||{}, org:org||{}, subj:subj||null, clauses:clauses||[], typeName:typeName||'', lawyerName:lawyerName||'' };
+}
+function clauseApplies(cl, d){
+  const a = cl.applicability||{}, ref = d.c.contract_date || today();
+  if(cl.effective_from && ref < cl.effective_from) return false;
+  if(cl.effective_to && ref > cl.effective_to) return false;
+  if(a.projects && a.projects.length && !a.projects.includes(d.c.project_id)) return false;
+  if(a.types && a.types.length && !a.types.includes(d.c.type_id)) return false;
+  if(a.kinds && a.kinds.length && !a.kinds.includes(d.kind)) return false;
+  return true;
+}
+const clauseSort = (a,b) => ((a.sort_order??100)-(b.sort_order??100)) || String(a.code).localeCompare(String(b.code));
+// значення тегу: {v, miss, block, flag}
+function tagValue(name, mapping, d){
+  const m = (mapping && mapping[name]) || null;
+  if(!m && TPL_FLAG_SET.has(name)) return {v:flagValue(name,d), flag:true};
+  const r = m || autoMapTag(name, d.clauses);
+  if(!r) return {v:'', miss:true};
+  if(r.type==='field'){ const f = TPL_FIELD[r.field]; const raw = f ? f.get(d) : null; const v = raw==null ? '' : String(raw); return {v, miss:v.trim()==='', block:!!(f&&f.block)}; }
+  if(r.type==='clause'){ const cl = d.clauses.find(x=>x.code===r.code); return cl ? {v:cl.body||'', block:true, miss:!String(cl.body||'').trim()} : {v:'', miss:true, block:true}; }
+  if(r.type==='category'){ const list = d.clauses.filter(x=>x.category===r.category && clauseApplies(x,d)).sort(clauseSort); return {v:list.map(x=>String(x.body||'').trim()).filter(Boolean).join('\n'), block:true}; }
+  if(r.type==='text') return {v:r.text||'', block:/\n/.test(r.text||'')};
+  if(r.type==='empty') return {v:''};
+  return {v:'', miss:true};
+}
+// положення, що потраплять у документ (для правої панелі шаблону)
+function clausesForMapping(mapping, d){
+  const out = [];
+  for(const r of Object.values(mapping||{})){
+    if(r.type==='clause'){ const cl=d.clauses.find(x=>x.code===r.code); if(cl) out.push(cl); }
+    if(r.type==='category') d.clauses.filter(x=>x.category===r.category && clauseApplies(x,d)).forEach(x=>out.push(x));
+  }
+  return [...new Map(out.map(x=>[x.id,x])).values()].sort(clauseSort);
+}
+
+/* ---- XML ---- */
+const xmlEsc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const xmlUnesc = s => String(s).replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&apos;/g,"'")
+  .replace(/&#x([0-9a-f]+);/gi,(m,h)=>String.fromCodePoint(parseInt(h,16))).replace(/&#(\d+);/g,(m,n)=>String.fromCodePoint(+n)).replace(/&amp;/g,'&');
+const WT_RE = /(<w:t(?:\s[^>]*)?>)([\s\S]*?)(<\/w:t>)/g;
+// межі абзаців без вкладених абзаців (абзаци в написах/текстових полях — окремо)
+function leafParagraphs(xml){
+  const re = /<w:p(?=[\s>\/])[^>]*?(\/?)>|<\/w:p>/g, st = [], out = []; let m;
+  while((m = re.exec(xml))){
+    if(m[0]==='</w:p>'){ const o = st.pop(); if(o && !o.kids) out.push({s:o.s, e:m.index+6}); }
+    else if(m[1]==='/'){ if(st.length) st[st.length-1].kids = true; }
+    else { if(st.length) st[st.length-1].kids = true; st.push({s:m.index, kids:false}); }
+  }
+  return out;
+}
+function mapLeafParagraphs(xml, fn){
+  const ps = leafParagraphs(xml); let out = xml;
+  for(let i=ps.length-1;i>=0;i--){ const {s,e} = ps[i]; const p = out.slice(s,e), q = fn(p); if(q!==p) out = out.slice(0,s)+q+out.slice(e); }
+  return out;
+}
+const paraText = p => { let t='', m; WT_RE.lastIndex=0; while((m=WT_RE.exec(p))) t += xmlUnesc(m[2]); return t; };
+// тег {{…}}, розбитий Word на кілька фрагментів, переносимо в перший фрагмент
+function joinTagRuns(p){
+  const nodes = []; let m; WT_RE.lastIndex = 0;
+  while((m = WT_RE.exec(p))) nodes.push({i:m.index, len:m[0].length, open:m[1], text:xmlUnesc(m[2]), close:m[3]});
+  if(nodes.length<2) return p;
+  const full = nodes.map(n=>n.text).join('');
+  if(full.indexOf('{{')<0) return p;
+  const owner = []; nodes.forEach((n,k)=>{ for(let j=0;j<n.text.length;j++) owner.push(k); });
+  const re = /\{\{[^{}]*\}\}/g; let t, changed = false;
+  while((t = re.exec(full))){ const k0 = owner[t.index]; for(let j=t.index;j<t.index+t[0].length;j++) if(owner[j]!==k0){ owner[j]=k0; changed=true; } }
+  if(!changed) return p;
+  const texts = nodes.map(()=> '');
+  for(let j=0;j<full.length;j++) texts[owner[j]] += full[j];
+  let out = '', pos = 0;
+  nodes.forEach((n,k)=>{ out += p.slice(pos, n.i); let open = n.open; const tx = texts[k];
+    if(/^\s|\s$/.test(tx) && !/xml:space=/.test(open)) open = open.replace(/^<w:t/, '<w:t xml:space="preserve"');
+    out += open + xmlEsc(tx) + n.close; pos = n.i + n.len; });
+  return out + p.slice(pos);
+}
+const getPPr = p => (/<w:pPr>[\s\S]*?<\/w:pPr>|<w:pPr\/>/.exec(p)||[''])[0];
+function getTagRPr(p){
+  const i = p.indexOf('{{'); if(i<0) return '';
+  const head = p.slice(0,i), rs = Math.max(head.lastIndexOf('<w:r>'), head.lastIndexOf('<w:r '));
+  if(rs<0) return ''; const mm = /<w:rPr>[\s\S]*?<\/w:rPr>/.exec(head.slice(rs)); return mm ? mm[0] : '';
+}
+// багаторядковий текст → окремі абзаци з форматуванням абзацу, де стояв тег
+function blockXml(v, pPr, rPr){
+  const lines = String(v||'').split(/\r?\n/).map(s=>s.replace(/\s+$/,'')).filter(s=>s.trim()!=='');
+  const hasSect = /<w:sectPr[\s>\/]/.test(pPr), pNo = pPr.replace(/<w:sectPr[\s\S]*?<\/w:sectPr>|<w:sectPr\/>/, '');
+  if(!lines.length) return hasSect ? `<w:p>${pPr}</w:p>` : '';
+  const run = ln => ln.split('\t').map(x=>`<w:r>${rPr}<w:t xml:space="preserve">${xmlEsc(x)}</w:t></w:r>`).join(`<w:r>${rPr}<w:tab/></w:r>`);
+  return lines.map((ln,i)=>`<w:p>${hasSect&&i===lines.length-1?pPr:pNo}${run(ln)}</w:p>`).join('');
+}
+const docParts = zip => Object.keys(zip.files).filter(n=>DOC_PARTS.test(n));
+const DOCX_ERR = {
+  unclosed_tag:'Незакрите поле — бракує }}', unopened_tag:'Зайві }} без {{', duplicate_open_tag:'Подвійні {{ підряд', duplicate_close_tag:'Подвійні }} підряд',
+  unclosed_loop:'Умовний блок не закрито — додайте {{/…}}', unopened_loop:'Закриття {{/…}} без відкриття {{#…}}',
+  closing_tag_does_not_match_opening_tag:'Закриття блоку не відповідає відкриттю', raw_xml_tag_should_be_only_text_in_paragraph:'Поле з @ має стояти окремим абзацом',
+  unbalanced_loop_tags:'Умовні блоки перетинаються — закрийте внутрішній блок раніше',
+};
+const partLabel = f => /header/.test(f)?'верхній колонтитул':/footer/.test(f)?'нижній колонтитул':/footnotes/.test(f)?'виноски':/endnotes/.test(f)?'кінцеві виноски':'';
+function docxErrors(e){
+  if(e && !e.properties && /zip|end of data|corrupt|signature/i.test(e.message||'')) return ['Файл не схожий на DOCX (Word 2007+). Відкрийте його у Word і збережіть як .docx'];
+  const list = (e && e.properties && e.properties.errors) || [e];
+  return list.map(x=>{ const p=(x&&x.properties)||{}; const base = DOCX_ERR[p.id] || (x&&x.message) || String(x);
+    const where = p.openingtag ? ` — {{#${p.openingtag}}} … {{/${p.closingtag}}}` : p.xtag ? ` — «${String(p.xtag).replace(/^\{+/,'{{')}»` : p.context ? ` — «${p.context}»` : '';
+    const f = p.file && p.file!=='word/document.xml' && partLabel(p.file) ? ` (${partLabel(p.file)})` : '';
+    return base + where + f; });
+}
+// перевірка шаблону і список тегів: [{name, prefix, count}]
+function inspectDocx(lib, buf){
+  let zip; try { zip = new lib.PizZip(buf); } catch(e){ return {errors:docxErrors(e), placeholders:[]}; }
+  if(!zip.file('word/document.xml')) return {errors:['Файл не схожий на DOCX (Word 2007+). Відкрийте його у Word і збережіть як .docx'], placeholders:[]};
+  let doc; try { doc = new lib.Docxtemplater(zip, DT_OPTS); } catch(e){ return {errors:docxErrors(e), placeholders:[]}; }
+  const seen = new Map();
+  const walk = arr => (arr||[]).forEach(p=>{ if(p && p.type==='placeholder'){
+    const name = String(p.value||'').trim(), prefix = p.module==='loop' ? (p.inverted?'^':'#') : p.module==='rawxml' ? '@' : '';
+    const key = prefix+'|'+name; if(!seen.has(key)) seen.set(key,{name, prefix, count:0}); seen.get(key).count++; walk(p.subparsed); } });
+  Object.values(doc.compiled||{}).forEach(c=>walk(c.postparsed));
+  return {errors:[], placeholders:[...seen.values()]};
+}
+// генерація: {out: Uint8Array, missing: [теги без даних]}
+function renderDocx(lib, buf, mapping, d){
+  const zip = new lib.PizZip(buf), B = {}; let bn = 0;
+  for(const part of docParts(zip)){
+    const xml = zip.file(part).asText();
+    const nx = mapLeafParagraphs(xml, p=>{
+      const q = joinTagRuns(p), t = paraText(q).trim(), m = /^\{\{\s*([^{}#\/^@\s][^{}]*?)\s*\}\}$/.exec(t);
+      if(!m) return q;
+      const r = tagValue(m[1], mapping, d);
+      if(r.flag || !(r.block || /\n/.test(r.v))) return q;
+      const key = '__b'+(bn++); B[key] = {tag:m[1], r, pPr:getPPr(q), rPr:getTagRPr(q)};
+      return `<w:p>${B[key].pPr}<w:r><w:t>{{@${key}}}</w:t></w:r></w:p>`;
+    });
+    if(nx!==xml) zip.file(part, nx);
+  }
+  const miss = new Set();
+  const doc = new lib.Docxtemplater(zip, {...DT_OPTS,
+    parser: tag=>{ const t = String(tag).trim(); return { get(scope){
+      if(t==='.') return scope;
+      if(B[t]){ const b = B[t]; if(b.r.miss) miss.add(b.tag); return blockXml(b.r.v, b.pPr, b.rPr); }
+      const r = tagValue(t, mapping, d); if(r.miss) miss.add(t); return r.v; } }; },
+    nullGetter: ()=>'' });
+  doc.render({});
+  return { out: doc.getZip().generate({type:'uint8array', mimeType:DOCX_MIME, compression:'DEFLATE'}), missing:[...miss] };
+}
+// копія шаблону для перегляду: теги зібрані в один фрагмент, щоб їх можна було підсвітити
+function previewDocx(lib, buf){
+  const zip = new lib.PizZip(buf);
+  for(const part of docParts(zip)){ const xml = zip.file(part).asText(), nx = mapLeafParagraphs(xml, joinTagRuns); if(nx!==xml) zip.file(part, nx); }
+  return zip.generate({type:'uint8array', mimeType:DOCX_MIME});
+}
+function highlightTags(root, classify){
+  const tw = document.createTreeWalker(root, NodeFilter.SHOW_TEXT), nodes = [];
+  while(tw.nextNode()) if(tw.currentNode.nodeValue.includes('{{')) nodes.push(tw.currentNode);
+  for(const n of nodes){
+    const s = n.nodeValue, re = /\{\{\s*([#\/^@]?)\s*([^{}]*?)\s*\}\}/g, frag = document.createDocumentFragment(); let m, last = 0;
+    while((m = re.exec(s))){
+      if(m.index>last) frag.appendChild(document.createTextNode(s.slice(last, m.index)));
+      const mk = document.createElement('mark'), c = classify(m[1], m[2]); mk.className = 'ph '+c.cls; mk.textContent = m[0]; if(c.title) mk.title = c.title;
+      frag.appendChild(mk); last = m.index + m[0].length;
+    }
+    if(last<s.length) frag.appendChild(document.createTextNode(s.slice(last)));
+    n.parentNode.replaceChild(frag, n);
+  }
+}
+async function renderDocxPreview(el, bytes){
+  const pv = await loadDocxPreview(), renderAsync = pv.renderAsync || (pv.default && pv.default.renderAsync);
+  el.innerHTML = '';
+  await renderAsync(bytes, el, el, {className:'docx', inWrapper:true, ignoreWidth:false, ignoreHeight:true, breakPages:true, renderHeaders:true, renderFooters:true, renderFootnotes:true, useBase64URL:true});
+}
+
+/* ---- назви файлів версій ---- */
+const VER_KIND = {generated:'згенерована', lawyer_edit:'правка юриста', negotiation:'погоджувальна', final:'фінальна'};
+const fileExt = n => ((String(n||'').match(/\.([a-z0-9]{1,5})$/i)||[])[1]||'docx').toLowerCase();
+const cleanFile = s => String(s||'').replace(/[\\\/:*?"<>|\u0000-\u001f]+/g,'-').replace(/\s+/g,' ').trim();
+// фінальний файл: yyyymmdd_[Тип документа] [Номер]_[Контрагент латиницею]_[Проєкт]; до підписання — технічне ім’я
+function versionFileName(c, v, o={}){
+  const ext = fileExt(v.file_name);
+  if(o.final && c.sign_date && c.number){
+    const parts = [c.sign_date.replace(/-/g,'')+'_'+cleanFile((o.docShort||'Договір')+' '+c.number), cleanFile(o.cpLatin || translitUA(o.cpName||''))];
+    if(o.projectCode) parts.push(cleanFile(o.projectCode));
+    return parts.filter(Boolean).join('_')+'.'+ext;
+  }
+  return cleanFile(`${c.number||'Без номера'} v${v.version_no} (${VER_KIND[v.kind]||v.kind})`)+'.'+ext;
+}
+// тестові дані для «Тесту шаблону»: {org, clauses, kind, project, typeId, typeName}
+function sampleContext(o={}){
+  const {org, clauses, kind, project, typeId, typeName} = o;
+  const k = kind && kind!=='any' ? kind : 'fop';
+  const cp = k==='company'
+    ? {name:'ТОВ «Приклад»', name_latin:'TOV Pryklad', tax_id:'14360570', address:'м. Київ, вул. Хрещатик, 1', iban:'UA213223130000026007233566001', bank_name:'АТ «Банк»', email:'office@pryklad.ua', phone:'+380441234567', idx:'S001', signatory_position:'директора', signatory_name:'Іваненка Петра Олександровича', signatory_basis:'Статуту', signatory_short:'Петро ІВАНЕНКО'}
+    : {name:k==='fop'?'ФОП Петренко Іван Іванович':'Петренко Іван Іванович', name_latin:'Petrenko Ivan', tax_id:'1234567890', address:'м. Київ, вул. Прикладна, 10, кв. 5', iban:'UA213223130000026007233566001', bank_name:'АТ КБ «ПриватБанк»', email:'petrenko@example.com', phone:'+380501234567', fop_registration:k==='fop'?'Запис в ЄДР № 2000000000000012345 від 01.02.2020':'', idx:'S001'};
+  const lf = k==='fop'?{short:'ФОП', name:'Фізична особа-підприємець', person:true} : k==='person'?{short:'ФО', name:'Фізична особа (ЦПХ)', person:true} : {short:'ТОВ', name:'Товариство з обмеженою відповідальністю', person:false};
+  const d0 = today();
+  return docContext({contract:{number:'S001-UNICEF#3-1', contract_date:d0, start_date:d0, end_date:addDays(d0, 90), title:'Надання послуг тьютора',
+      subject:'Виконавець зобов’язується надати послуги тьютора з підтримки навчання дітей.\nПослуги надаються відповідно до плану, погодженого з Замовником.',
+      amount:15000, currency_code:'UAH', amount_type:'fixed', indefinite:false, worksection_url:'https://worksection.com/project/1/',
+      project_id:project?project.id:null, type_id:typeId||null},
+    cp, lf, project:project||{short_code:'UNICEF#3', full_name:'UNICEF SBC 3', donor:'UNICEF'}, org:org||{}, clauses:clauses||[],
+    typeName:typeName||'Надання послуг', lawyerName:'Марія Іваненко', subj:{name:'Тьютор SBC', role_title:'тьютор', body:''}});
 }
 
 /* ---------------- Реєстр договорів ---------------- */
@@ -779,7 +1175,7 @@ function SaveViewModal({onClose, onSave}){
 
 /* ---------------- Новий договір ---------------- */
 const searchCounterparties = async q => {
-  let x = sb.from('counterparties').select('id,name,idx,tax_id,category_id').eq('active',true).order('name').limit(20);
+  let x = sb.from('counterparties').select('id,name,idx,tax_id,category_id,legal_form_id').eq('active',true).order('name').limit(20);
   if(q && q.trim()) x = x.like('search_text', '%'+fold(q.trim())+'%');
   const {data,error} = await x; if(error) throw error;
   return (data||[]).map(c=>({v:c.id, l:c.name, sub:[c.idx||'без індексу', c.tax_id].filter(Boolean).join(' • '), c}));
@@ -817,20 +1213,23 @@ function NewContract({cpId}){
   const [r,setR]=useState({amount_type:'fixed', currency_code:'UAH', contract_date:today(), start_date:today(), end_date:'', indefinite:false,
                            lawyer_id: ['lawyer','head_legal'].includes(role)?me.id:'', title:'', subject:''});
   const [cp,setCp]=useState(null); const [preview,setPreview]=useState(null); const [busy,setBusy]=useState(false);
-  const [errs,setErrs]=useState({}); const [newCp,setNewCp]=useState(false); const [tried,setTried]=useState(false);
+  const [errs,setErrs]=useState({}); const [newCp,setNewCp]=useState(false); const [tried,setTried]=useState(false); const [genAfter,setGenAfter]=useState(true);
+  const {tp, sj} = useLibLists();
   const set=(k,v)=>setR(p=>({...p,[k]:v}));
-  useEffect(()=>{ if(cpId) sb.from('counterparties').select('id,name,idx,tax_id,category_id').eq('id',cpId).maybeSingle().then(({data})=>data&&setCp(data)); },[cpId]);
+  useEffect(()=>{ if(cpId) sb.from('counterparties').select('id,name,idx,tax_id,category_id,legal_form_id').eq('id',cpId).maybeSingle().then(({data})=>data&&setCp(data)); },[cpId]);
   useEffect(()=>{ if(!cp||!r.project_id||!cp.idx){ setPreview(null); return; }
     sb.rpc('preview_contract_number',{p_counterparty:cp.id, p_project:r.project_id}).then(({data})=>setPreview(data||null)); },[cp&&cp.id, r.project_id]);
   useEffect(()=>{ if(tried) setErrs(validateContract(r, true, cp)); },[r, cp, tried]);
   if(!can(role,'legal')) return html`<${Empty} title="Створювати договори може юридичний офіс"/>`;
   const create=async()=>{ setTried(true); const e=validateContract(r, true, cp); setErrs(e); if(Object.keys(e).length) return;
     setBusy(true);
-    const p={...r, counterparty_id:cp.id, amount: r.amount_type==='none'?null:normNum(r.amount), worksection_url:(r.worksection_url||'').trim()};
+    const p={...r, counterparty_id:cp.id, amount: r.amount_type==='none'?null:normNum(r.amount), worksection_url:(r.worksection_url||'').trim(),
+      template_id:r.template_id||null, subject_ref_id:r.subject_ref_id||null};
     const {data,error}=await sb.rpc('create_contract',{p}); setBusy(false);
     if(error) return toastErr(error);
-    pushToast('Чернетку створено','ok'); go('contracts/'+data);
+    pushToast('Чернетку створено','ok'); go('contracts/'+data+(r.template_id&&genAfter?'?tab=document&gen=1':''));
   };
+  const kind = cp ? cpKind(cp, d.formsBy[cp.legal_form_id]) : null;
   const lawyers=d.users.filter(u=>['admin','head_legal','lawyer'].includes(u.role)&&u.active!==false);
   return html`
     <div class="head"><div><h1>Новий договір</h1><p>Картку створює юридичний офіс</p></div><div class="acts"><button class="btn" onClick=${()=>history.back()}>Скасувати</button></div></div>
@@ -841,9 +1240,11 @@ function NewContract({cpId}){
           footer=${html`<div class="ss-opt" style="color:var(--accent);font-weight:600" onClick=${()=>setNewCp(true)}>+ Новий контрагент</div>`}/><//>
         <${FRow} label="Проєкт" req error=${errs.project}><${SearchSelect} value=${r.project_id||''} options=${d.projects.filter(p=>p.active).map(p=>({v:p.id,l:projectLabel(p),sub:p.donor||''}))} onChange=${v=>set('project_id',v)}/><//>
         <${FRow} label="Тип договору" req error=${errs.type}><${SearchSelect} value=${r.type_id||''} options=${d.types.filter(t=>t.active).map(t=>({v:t.id,l:t.name}))} onChange=${v=>set('type_id',v)}/><//>
-        <${FRow} label="Шаблон" hint="Генерація за шаблоном з’явиться на етапі 2"><input disabled placeholder="—"/><//>
+        <${FRow} label="Шаблон" hint=${r.template_id?'':'Можна обрати й пізніше — на вкладці «Документ»'}><${SearchSelect} value=${r.template_id||''} options=${tplOptions(tp, r, kind, d)} onChange=${v=>set('template_id',v)} placeholder="— без шаблону —"/>
+          ${r.template_id&&html`<div style="margin-top:6px"><${Check} checked=${genAfter} onChange=${setGenAfter}>Одразу сформувати документ після створення<//></div>`}<//>
+        <${FRow} label="Предмет з бібліотеки" hint="Текст копіюється в договір — правки тут не змінюють бібліотеку"><${SubjectPick} r=${r} setR=${setR} sj=${sj} kind=${kind}/><//>
         <${FRow} label="Предмет" req error=${errs.title}><input value=${r.title} placeholder="Коротко, наприклад: Організаційний супровід освітніх активностей" onInput=${e=>set('title',e.target.value)}/><//>
-        <${FRow} label="Повний текст предмета"><textarea rows="3" value=${r.subject} onInput=${e=>set('subject',e.target.value)}></textarea><//>
+        <${FRow} label="Повний текст предмета"><textarea rows=${r.subject&&r.subject.length>200?6:3} value=${r.subject} onInput=${e=>set('subject',e.target.value)}></textarea><//>
         <${FRow} label="Сума" error=${errs.amount}><${AmountInputs} r=${r} set=${set}/><//>
         <${FRow} label="Дата договору"><input type="date" value=${r.contract_date||''} onInput=${e=>set('contract_date',e.target.value)}/><//>
         <${FRow} label="Строк" error=${errs.end}><${TermInputs} r=${r} set=${set}/><//>
@@ -863,7 +1264,7 @@ function NewContract({cpId}){
 }
 
 /* ---------------- Картка договору ---------------- */
-function ContractPage({id, tab}){
+function ContractPage({id, tab, gen}){
   const {me, role, d} = useCtx();
   const [c,setC]=useState(null); const [dlg,setDlg]=useState(null); const [editing,setEditing]=useState(false); const [files,setFiles]=useState(null);
   const load=async()=>{ const {data,error}=await sb.from('v_contracts').select('*').eq('id',id).maybeSingle(); if(error) toastErr(error); setC(data||false); };
@@ -897,9 +1298,8 @@ function ContractPage({id, tab}){
     ${tab==='overview'&&(editing
       ? html`<${ContractEditForm} c=${c} onCancel=${()=>setEditing(false)} onSaved=${()=>{ setEditing(false); load(); }}/>`
       : html`<${ContractOverview} c=${c} files=${files} onTab=${setTab}/>`)}
-    ${tab==='document'&&html`<div class="card pad"><${FilesPanel} contractId=${c.id} files=${files} reload=${loadFiles} editable=${legal}/>
-      <p class="small" style="margin-top:14px">Генерація документа з шаблону й версії з’являться на етапі 2.</p></div>`}
-    ${tab==='versions'&&html`<div class="card pad"><p>Версії документа (згенерована / правки юриста / погодження / фінальна) з’являться на етапі 2 разом із шаблонами.</p></div>`}
+    ${tab==='document'&&html`<${ContractDocument} c=${c} files=${files} reloadFiles=${loadFiles} reload=${load} gen=${!!gen}/>`}
+    ${tab==='versions'&&html`<${ContractVersions} c=${c}/>`}
     ${tab==='amendments'&&html`<div class="card pad"><p>Додаткові угоди до договору з’являться на етапі 5.</p></div>`}
     ${tab==='vchasno'&&html`<div class="card pad"><p>Передача у Вчасно, статуси й підписані файли з’являться на етапі 4.</p></div>`}
     ${tab==='history'&&html`<div class="card pad"><${EntityHistory} entity="contracts" id=${c.id} withFiles=${true}/></div>`}
@@ -921,7 +1321,9 @@ function ContractOverview({c, files, onTab}){
         <div class="k">Проєкт</div><div class="v">${c.project_id?projectLabel(d.projectsBy[c.project_id])||c.project_code:'—'}</div>
         <div class="k">Тип</div><div class="v">${c.type_name||'—'}</div>
         <div class="k">Предмет</div><div class="v">${c.title||'—'}</div>
+        ${c.subject_ref_id&&html`<div class="k">Предмет з бібліотеки</div><div class="v">${c.subject_name||'—'} <span class="small muted">${c.subject_code||''}${c.subject_version?' v'+c.subject_version:''}</span></div>`}
         ${c.subject&&html`<div class="k">Повний текст предмета</div><div class="v small">${c.subject}</div>`}
+        ${c.template_id&&html`<div class="k">Шаблон</div><div class="v">${c.template_name||'—'}</div>`}
         <div class="k">Сума</div><div class="v">${fmtAmount(c)}${c.amount_type!=='none'&&c.amount!=null?' • '+(amMap[c.amount_type]||'').toLowerCase():''}</div>
         <div class="k">Дата</div><div class="v">${fmtDate(c.contract_date)||'—'}</div>
         <div class="k">Період</div><div class="v">${c.indefinite?(c.start_date?'з '+fmtDate(c.start_date)+', безстроковий':'безстроковий'):((fmtDate(c.start_date)||'…')+' — '+(fmtDate(c.end_date)||'…'))}</div>
@@ -942,9 +1344,7 @@ function ContractOverview({c, files, onTab}){
           dl<0?html`<div class="b" style="font-size:18px;color:var(--red)">Прострочено на ${-dl} ${plural(-dl,'день','дні','днів')}</div>`:
           html`<div class="b" style="font-size:20px">${dl} ${plural(dl,'день','дні','днів')} до завершення</div>`}
         ${nr&&html`<div style="margin-top:12px"><${Chip} c="amber">Наступне нагадування: за ${nr} днів<//></div>`}</div>
-      <div class="card pad"><h3>Файли</h3>
-        ${files===null?html`<p>…</p>`:files.length===0?html`<p>Файлів ще немає.</p>`:files.slice(0,5).map(f=>html`<div key=${f.id} class="small" style="padding:4px 0">📄 ${f.file_name}</div>`)}
-        <a href="javascript:void 0" style="display:inline-block;margin-top:10px;font-weight:600" onClick=${()=>onTab('document')}>${files&&files.length?'Усі файли':'Додати файли'} →</a></div>
+      <${DocCard} c=${c} files=${files} onTab=${onTab}/>
     </div>
   </div>`;
 }
@@ -952,12 +1352,15 @@ function ContractOverview({c, files, onTab}){
 function ContractEditForm({c, onCancel, onSaved}){
   const {d} = useCtx();
   const [r,setR]=useState({title:c.title||'', subject:c.subject||'', type_id:c.type_id||'', amount_type:c.amount_type||'fixed', amount:c.amount??'', currency_code:c.currency_code||'UAH',
-    contract_date:c.contract_date||'', start_date:c.start_date||'', end_date:c.end_date||'', indefinite:!!c.indefinite, lawyer_id:c.lawyer_id||'', worksection_url:c.worksection_url||'', note:c.note||''});
+    contract_date:c.contract_date||'', start_date:c.start_date||'', end_date:c.end_date||'', indefinite:!!c.indefinite, lawyer_id:c.lawyer_id||'', worksection_url:c.worksection_url||'', note:c.note||'',
+    sign_date:c.sign_date||'', subject_ref_id:c.subject_ref_id||'', template_id:c.template_id||''});
+  const {tp, sj} = useLibLists();
   const [errs,setErrs]=useState({}); const [busy,setBusy]=useState(false);
   const set=(k,v)=>setR(p=>({...p,[k]:v}));
   const save=async()=>{ const e=validateContract(r,false); setErrs(e); if(Object.keys(e).length) return; setBusy(true);
     const p={...r, title:r.title.trim(), subject:r.subject||null, type_id:r.type_id||null, amount: r.amount_type==='none'?null:normNum(r.amount), contract_date:r.contract_date||null,
-      start_date:r.start_date||null, end_date:r.indefinite?null:(r.end_date||null), lawyer_id:r.lawyer_id||null, worksection_url:(r.worksection_url||'').trim()||null, note:r.note||null};
+      start_date:r.start_date||null, end_date:r.indefinite?null:(r.end_date||null), lawyer_id:r.lawyer_id||null, worksection_url:(r.worksection_url||'').trim()||null, note:r.note||null,
+      sign_date:r.sign_date||null, subject_ref_id:r.subject_ref_id||null, template_id:r.template_id||null};
     const {error}=await sb.from('contracts').update(p).eq('id',c.id); setBusy(false);
     if(error) return toastErr(error); pushToast('Збережено','ok'); onSaved(); };
   const lawyers=d.users.filter(u=>['admin','head_legal','lawyer'].includes(u.role)&&(u.active!==false||u.id===c.lawyer_id));
@@ -967,10 +1370,13 @@ function ContractEditForm({c, onCancel, onSaved}){
     <${FRow} label="Контрагент" hint=${c.number?'Заблоковано разом із номером':''}><input disabled value=${(c.cp_name||'—')+(c.cp_idx?' • '+c.cp_idx:'')}/><//>
     <${FRow} label="Проєкт" hint=${c.number?'Заблоковано разом із номером':''}><input disabled value=${c.project_id?projectLabel(d.projectsBy[c.project_id]):'—'}/><//>
     <${FRow} label="Тип договору" req error=${errs.type}><${SearchSelect} value=${r.type_id} options=${typeOpts} onChange=${v=>set('type_id',v)}/><//>
+    <${FRow} label="Предмет з бібліотеки" hint="Текст копіюється в договір — правки тут не змінюють бібліотеку"><${SubjectPick} r=${r} setR=${setR} sj=${sj} kind=${null} cur=${c.subject_ref_id?{id:c.subject_ref_id, name:c.subject_name, code:c.subject_code}:null}/><//>
     <${FRow} label="Предмет" req error=${errs.title}><input value=${r.title} onInput=${e=>set('title',e.target.value)}/><//>
-    <${FRow} label="Повний текст предмета"><textarea rows="3" value=${r.subject} onInput=${e=>set('subject',e.target.value)}></textarea><//>
+    <${FRow} label="Повний текст предмета"><textarea rows=${r.subject&&r.subject.length>200?6:3} value=${r.subject} onInput=${e=>set('subject',e.target.value)}></textarea><//>
+    <${FRow} label="Шаблон"><${SearchSelect} value=${r.template_id} options=${tplOptions(tp, {project_id:c.project_id, type_id:r.type_id}, null, d, c.template_id?{v:c.template_id, l:c.template_name||'—'}:null)} onChange=${v=>set('template_id',v)} placeholder="— без шаблону —"/><//>
     <${FRow} label="Сума" error=${errs.amount}><${AmountInputs} r=${r} set=${set}/><//>
     <${FRow} label="Дата договору"><input type="date" value=${r.contract_date} onInput=${e=>set('contract_date',e.target.value)}/><//>
+    <${FRow} label="Дата підписання" hint="Потрапляє у фінальну назву файлу. Після підключення Вчасно заповнюватиметься автоматично"><input type="date" value=${r.sign_date} onInput=${e=>set('sign_date',e.target.value)}/><//>
     <${FRow} label="Строк" error=${errs.end}><${TermInputs} r=${r} set=${set}/><//>
     <${FRow} label="Юрист"><${SearchSelect} value=${r.lawyer_id} options=${lawyers.map(u=>({v:u.id,l:userLabel(u)}))} onChange=${v=>set('lawyer_id',v)} placeholder="Не призначено"/><//>
     <${FRow} label="Worksection" error=${errs.ws}><input value=${r.worksection_url} onInput=${e=>set('worksection_url',e.target.value)}/><//>
@@ -1030,7 +1436,7 @@ function FinanceDialog({c, onClose, onDone}){
 }
 
 /* ---------------- Файли договору ---------------- */
-function FilesPanel({contractId, files, reload, editable}){
+function FilesPanel({contractId, files, reload, editable, title}){
   const [up,setUp]=useState(false);
   const onFile=async e=>{ const list=[...e.target.files]; e.target.value=''; if(!list.length) return;
     setUp(true); let ok=0; const errs=[];
@@ -1056,7 +1462,7 @@ function FilesPanel({contractId, files, reload, editable}){
     const {error:de}=await sb.from('contract_files').delete().eq('id',f.id); if(de) return toastErr(de);
     pushToast('Файл видалено','ok'); reload(); };
   return html`<div>
-    <div class="ctitle"><h3 style="margin:0">Файли договору</h3>
+    <div class="ctitle"><h3 style="margin:0">${title||'Файли договору'}</h3>
       ${editable&&html`<label class="btn sm">${up?html`<${Spinner} dark=${true}/>`:'+ Додати файли'}<input type="file" multiple onChange=${onFile} disabled=${up} style="display:none"/></label>`}</div>
     ${files===null?html`<${Loading}/>`:files.length===0?html`<p>Файлів ще немає.</p>`:html`<table><tbody>
       ${files.map(f=>html`<tr key=${f.id}><td><a href="javascript:void 0" title="Відкрити" onClick=${()=>openFile(f)}>📄 ${f.file_name}</a></td><td class="num muted nw">${fmtSize(f.size)}</td>
@@ -1067,24 +1473,42 @@ function FilesPanel({contractId, files, reload, editable}){
 
 /* ---------------- Історія змін ---------------- */
 const ENTITY_L = {contracts:'Договір', counterparties:'Контрагент', projects:'Проєкт', counterparty_categories:'Категорія контрагентів', legal_forms:'ОПФ',
-  contract_types:'Тип договору', document_types:'Тип документа', contract_files:'Файл договору', profiles:'Користувач'};
+  contract_types:'Тип договору', document_types:'Тип документа', contract_files:'Файл договору', profiles:'Користувач',
+  templates:'Шаблон', template_versions:'Версія шаблону', clauses:'Положення', subjects:'Предмет (бібліотека)', contract_versions:'Версія документа', org_settings:'Реквізити Фонду'};
 const FIELD_L = {number:'Номер', title:'Предмет', subject:'Повний текст предмета', counterparty_id:'Контрагент', project_id:'Проєкт', type_id:'Тип договору', amount:'Сума',
   amount_type:'Тип суми', currency_code:'Валюта', contract_date:'Дата договору', start_date:'Початок', end_date:'Завершення', indefinite:'Безстроковий', lawyer_id:'Юрист',
   worksection_url:'Worksection', status:'Статус', note:'Примітка', needs_extension:'Потребує продовження', seq_no:'Порядковий номер', number_assigned_at:'Номер присвоєно',
   package_id:'Пакет', name:'Назва', idx:'Індекс', category_id:'Категорія', legal_form_id:'ОПФ', tax_id:'ЄДРПОУ / РНОКПП', name_latin:'Назва латиницею', address:'Адреса',
   iban:'IBAN', bank_name:'Банк', email:'Email', phone:'Телефон', fop_registration:'Реєстрація ФОП', contact:'Контактна особа', active:'Активний', role:'Роль', full_name:'Назва / ПІБ',
   file_name:'Файл', short_code:'Код', donor:'Донор / партнер', prefix:'Префікс', next_sequence:'Наступний номер', short:'Скорочення', person:'Фізична особа',
-  sign_date:'Дата підписання', deadline:'Контрольна дата', responsible:'Відповідальний (старе поле)', our_org:'Наша сторона', kind:'Тип (старе поле)'};
-const HIDE_F = ['id','created_at','created_by','updated_at','search_text','import_batch_id','edrpou','uploaded_at','uploaded_by','file_path','size','contract_id'];
+  sign_date:'Дата підписання', deadline:'Контрольна дата', responsible:'Відповідальний (старе поле)', our_org:'Наша сторона', kind:'Тип',
+  template_id:'Шаблон', subject_ref_id:'Предмет з бібліотеки', final_version_id:'Фінальна версія', signatory_position:'Посада підписанта', signatory_name:'ПІБ підписанта',
+  signatory_basis:'Підстава повноважень', signatory_short:'Підпис (Ім’я ПРІЗВИЩЕ)', description:'Опис', contract_type_id:'Тип договору', doc_type_id:'Тип документа',
+  cp_kind:'Тип контрагента', scenario:'Роль / сценарій', archived:'В архіві', version_no:'Версія', mapping:'Зіставлення полів', tested_at:'Тест', activated_at:'Опубліковано',
+  source:'Джерело', comment:'Коментар', code:'Код', body:'Текст', category:'Категорія', applicability:'Застосовність', effective_from:'Чинне з', effective_to:'Чинне до',
+  sort_order:'Порядок', role_title:'Роль / посада', data:'Реквізити', template_version_id:'Версія шаблону'};
+const HIDE_F = ['id','created_at','created_by','updated_at','search_text','import_batch_id','edrpou','uploaded_at','uploaded_by','file_path','size','contract_id',
+  'placeholders','tested_by','activated_by','mime','missing_fields'];
 function useRefNames(entries){
   const {d} = useCtx(); const [cps,setCps]=useState({});
-  useEffect(()=>{ const ids=new Set(); (entries||[]).forEach(e=>['old_data','new_data'].forEach(k=>{ const v=e[k]&&e[k].counterparty_id; if(v) ids.add(v); }));
-    const need=[...ids].filter(x=>!cps[x]); if(!need.length) return;
-    sb.from('counterparties').select('id,name,idx').in('id',need).then(({data})=>{ if(data) setCps(p=>({...p, ...Object.fromEntries(data.map(x=>[x.id, x.name+(x.idx?' ('+x.idx+')':'')]))})); }); },[entries]);
-  return (k, v) => {
+  useEffect(()=>{ const want={counterparty_id:new Set(), template_id:new Set(), subject_ref_id:new Set(), final_version_id:new Set()};
+    (entries||[]).forEach(e=>['old_data','new_data'].forEach(k=>{ const o=e[k]||{}; Object.keys(want).forEach(f=>{ if(o[f]&&!cps[o[f]]) want[f].add(o[f]); }); }));
+    const put=list=>list&&setCps(p=>({...p, ...Object.fromEntries(list)}));
+    if(want.counterparty_id.size) sb.from('counterparties').select('id,name,idx').in('id',[...want.counterparty_id]).then(({data})=>put(data&&data.map(x=>[x.id, x.name+(x.idx?' ('+x.idx+')':'')])));
+    if(want.template_id.size) sb.from('templates').select('id,name').in('id',[...want.template_id]).then(({data})=>put(data&&data.map(x=>[x.id, x.name])));
+    if(want.subject_ref_id.size) sb.from('subjects').select('id,code,name,version_no').in('id',[...want.subject_ref_id]).then(({data})=>put(data&&data.map(x=>[x.id, x.name+' ('+x.code+' v'+x.version_no+')'])));
+    if(want.final_version_id.size) sb.from('contract_versions').select('id,version_no').in('id',[...want.final_version_id]).then(({data})=>put(data&&data.map(x=>[x.id, 'v'+x.version_no])));
+  },[entries]);
+  return (k, v, ent) => {
     if(v==null || v==='') return '—';
+    if(k==='status' && ['template_versions','clauses','subjects'].includes(ent)) return (TPL_VST[v]||{}).l||v;
     switch(k){
-      case 'counterparty_id': return cps[v]||'…';
+      case 'counterparty_id': case 'template_id': case 'subject_ref_id': case 'final_version_id': return cps[v]||'…';
+      case 'contract_type_id': return (d.typesBy[v]||{}).name||'—';
+      case 'doc_type_id': return (d.docTypes.find(x=>x.id===v)||{}).name||'—';
+      case 'cp_kind': return CP_KINDS[v]||v;
+      case 'category': return ent==='clauses' ? (CLAUSE_CATS[v]||v) : v;
+      case 'kind': return ent==='contract_versions' ? (VER_KIND[v]||v) : v;
       case 'project_id': return projectLabel(d.projectsBy[v])||'—';
       case 'type_id': return (d.typesBy[v]||{}).name||'—';
       case 'lawyer_id': return userLabel(d.usersBy[v])||'—';
@@ -1096,14 +1520,25 @@ function useRefNames(entries){
       case 'amount': return fmtMoney(v);
     }
     if(typeof v==='boolean') return v?'так':'ні';
-    if(/(_date|^deadline)$/.test(k) && typeof v==='string') return fmtDate(v);
+    if(typeof v==='object') return k==='mapping' ? Object.keys(v).length+' '+plural(Object.keys(v).length,'поле','поля','полів') : JSON.stringify(v).slice(0,160);
+    if(/(_date|^deadline|^effective_(from|to))$/.test(k) && typeof v==='string') return fmtDate(v);
     if(/_at$/.test(k)) return fmtDT(v);
     return String(v);
   };
 }
 function histSummary(e){
-  const o=e.old_data||{}, n=e.new_data||{};
+  const o=e.old_data||{}, n=e.new_data||{}, ch=e.changed||[];
   if(e.entity==='contract_files') return e.action==='insert'?'Додано файл «'+n.file_name+'»':e.action==='delete'?'Видалено файл «'+o.file_name+'»':'Змінено файл';
+  if(e.entity==='contract_versions') return e.action==='insert'?'Додано версію документа v'+n.version_no+' ('+(VER_KIND[n.kind]||n.kind)+')':'Змінено версію документа';
+  if(e.entity==='org_settings') return 'Змінено реквізити Фонду';
+  if(e.entity==='template_versions'){
+    if(e.action==='insert') return 'Створено версію шаблону v'+n.version_no; if(e.action==='delete') return 'Видалено чернетку шаблону v'+o.version_no;
+    if(ch.includes('status')) return n.status==='active'?'Опубліковано версію шаблону':'Версію шаблону архівовано';
+    if(ch.includes('tested_at')&&n.tested_at&&ch.length<=2) return 'Тест шаблону пройдено';
+    if(ch.includes('file_path')) return 'Замінено файл шаблону'; return 'Змінено версію шаблону'; }
+  if(e.entity==='clauses'||e.entity==='subjects'){ const w=e.entity==='clauses'?'положення':'предмет';
+    if(e.action==='insert') return 'Створено '+w+' '+n.code+' v'+n.version_no; if(e.action==='delete') return 'Видалено чернетку: '+w+' '+o.code;
+    if(ch.includes('status')) return n.status==='active'?'Опубліковано: '+w:'Знято з використання: '+w; return 'Змінено '+w; }
   if(e.action==='insert') return e.entity==='contracts'?'Створено договір':e.entity==='counterparties'?'Створено контрагента'+(n.idx?' '+n.idx:''):'Створено: '+(ENTITY_L[e.entity]||e.entity).toLowerCase();
   if(e.action==='delete') return 'Видалено: '+(ENTITY_L[e.entity]||e.entity).toLowerCase();
   if((e.changed||[]).includes('number') && !o.number && n.number) return 'Присвоєно номер '+n.number;
@@ -1116,11 +1551,17 @@ function HistoryItems({entries, showEntity}){
   if(!entries.length) return html`<p>Змін ще немає.</p>`;
   return html`<div class="hist">${entries.map(e=>{
     const keys=(e.action==='update'?(e.changed||[]):[]).filter(k=>!HIDE_F.includes(k)&&!(k==='number'&&!(e.old_data||{}).number)&&k!=='number_assigned_at'&&k!=='seq_no');
-    const ent = showEntity ? (e.entity==='contracts'?html` · <a href=${'#/contracts/'+e.entity_id}>договір</a>`:e.entity==='counterparties'?html` · <a href=${'#/counterparties/'+e.entity_id}>контрагент</a>`:e.entity==='contract_files'&&e.parent_id?html` · <a href=${'#/contracts/'+e.parent_id}>договір</a>`:' · '+(ENTITY_L[e.entity]||e.entity)) : '';
+    const ent = showEntity ? (e.entity==='contracts'?html` · <a href=${'#/contracts/'+e.entity_id}>договір</a>`:e.entity==='counterparties'?html` · <a href=${'#/counterparties/'+e.entity_id}>контрагент</a>`
+      :(e.entity==='contract_files'||e.entity==='contract_versions')&&e.parent_id?html` · <a href=${'#/contracts/'+e.parent_id}>договір</a>`
+      :e.entity==='templates'&&e.entity_id?html` · <a href=${'#/templates/'+e.entity_id}>шаблон</a>`:e.entity==='template_versions'&&e.parent_id?html` · <a href=${'#/templates/'+e.parent_id}>шаблон</a>`
+      :' · '+(ENTITY_L[e.entity]||e.entity)) : '';
     return html`<div class="it" key=${e.id}>
       <div><b>${histSummary(e)}</b>${ent}</div>
       <div class="small muted">${fmtDT(e.at)} · ${e.actor_email||'система'}</div>
-      ${keys.length>0&&html`<div class="ch">${keys.map(k=>html`<div key=${k}>${FIELD_L[k]||k}: <span class="muted">${fv(k,(e.old_data||{})[k])}</span> → <b>${fv(k,(e.new_data||{})[k])}</b></div>`)}</div>`}
+      ${keys.length>0&&html`<div class="ch">${keys.flatMap(k=>{ const ov=(e.old_data||{})[k], nv=(e.new_data||{})[k];
+        if(k==='data' && ov && nv && typeof ov==='object' && typeof nv==='object') return [...new Set([...Object.keys(ov),...Object.keys(nv)])].filter(x=>JSON.stringify(ov[x])!==JSON.stringify(nv[x]))
+          .map(x=>html`<div key=${x}>${ORG_L[x]||x}: <span class="muted">${ov[x]||'—'}</span> → <b>${nv[x]||'—'}</b></div>`);
+        return [html`<div key=${k}>${FIELD_L[k]||k}: <span class="muted">${fv(k,ov,e.entity)}</span> → <b>${fv(k,nv,e.entity)}</b></div>`]; })}</div>`}
       ${e.reason&&html`<div class="ch">Причина: «${e.reason}»</div>`}
     </div>`; })}</div>`;
 }
@@ -1131,6 +1572,587 @@ function EntityHistory({entity, id, withFiles}){
     q.then(({data,error})=>{ if(error){ toastErr(error); setRows([]); } else setRows(data); }); },[entity,id]);
   if(rows===null) return html`<${Loading}/>`;
   return html`<${HistoryItems} entries=${rows}/>`;
+}
+
+/* ---------------- Шаблони ---------------- */
+const TPL_VST = {draft:{l:'Чернетка', c:'amber'}, active:{l:'Активна', c:'green'}, archived:{l:'Архівна', c:'gray'}};
+const tplFileCache = new Map();
+async function loadStorageBytes(bucket, path){
+  const key = bucket+':'+path; if(tplFileCache.has(key)) return tplFileCache.get(key);
+  const {data, error} = await sb.storage.from(bucket).download(path); if(error) throw error;
+  const bytes = new Uint8Array(await data.arrayBuffer()); tplFileCache.set(key, bytes); return bytes;
+}
+const loadTemplateFile = path => loadStorageBytes('templates', path);
+async function loadClausesAll(){ const {data,error}=await sb.from('clauses').select('*').order('code').order('version_no'); if(error) throw error; return data||[]; }
+function tplState(t){
+  const vs = t.template_versions||[], act = vs.find(v=>v.status==='active'), dr = vs.find(v=>v.status==='draft');
+  if(t.archived) return {k:'archived', l:'Архівний', c:'gray', act, dr};
+  if(act) return {k:'active', l:'Активний', c:'green', act, dr};
+  if(dr) return {k:'draft', l:'Чернетка', c:'amber', act, dr};
+  return {k:'inactive', l:'Без активної версії', c:'gray', act, dr};
+}
+const tagLabel = (tag, mapping) => { const m=(mapping||{})[tag]||autoMapTag(tag,[]); if(!m) return tag;
+  if(m.type==='field') return (TPL_FIELD[m.field]||{}).l||tag; if(m.type==='clause') return 'Положення '+m.code; if(m.type==='category') return 'Положення: '+(CLAUSE_CATS[m.category]||m.category); return tag; };
+const tagWhere = (tag, mapping) => { const m=(mapping||{})[tag]||autoMapTag(tag,[]); const f=m&&m.type==='field'&&TPL_FIELD[m.field];
+  if(!f) return m&&m.type==='clause'?'Бібліотеки → Положення':''; return ['картка договору','картка договору','картка контрагента','Налаштування → Реквізити Фонду','картка договору / проєкт'][f.g]; };
+function tagClassify(mapping){
+  return (prefix, name) => {
+    if(prefix==='/'||prefix==='#'||prefix==='^'){ const fl=TPL_FLAGS.find(f=>f.k===name);
+      return {cls: fl||(mapping||{})[name] ? 's' : 'x', title: prefix==='/' ? 'кінець умовного блоку' : 'умова: '+(fl?fl.l:name)+(prefix==='^'?' (НЕ)':'')}; }
+    const m=(mapping||{})[name]; if(!m) return {cls:'x', title:'Не зіставлено'};
+    if(m.type==='clause'||m.type==='category') return {cls:'c', title:tagLabel(name,mapping)};
+    return {cls:'f', title:m.type==='field'?tagLabel(name,mapping):MAP_TYPES[m.type]};
+  };
+}
+
+function DocxView({bytes, classify, height, empty}){
+  const ref=useRef(null); const [busy,setBusy]=useState(false); const [err,setErr]=useState('');
+  const fit=()=>{ const el=ref.current, w=el&&el.querySelector('.docx-wrapper'), sec=w&&w.querySelector('section.docx'); if(!sec) return;
+    w.style.zoom=''; const need=sec.offsetWidth+32, avail=el.clientWidth-4; w.style.zoom = need>avail ? String(Math.max(0.45, avail/need)) : ''; };
+  useEffect(()=>{ let dead=false; if(!bytes||!ref.current) return; setBusy(true); setErr('');
+    renderDocxPreview(ref.current, bytes).then(()=>{ if(dead) return; if(classify) highlightTags(ref.current, classify); fit(); setBusy(false); })
+      .catch(e=>{ if(!dead){ setErr('Не вдалося показати документ: '+errText(e)); setBusy(false); } });
+    return ()=>{ dead=true; }; },[bytes]);
+  useEffect(()=>{ addEventListener('resize',fit); return ()=>removeEventListener('resize',fit); },[]);
+  return html`<div class="docx-box" style=${height?'max-height:'+height:''}>
+    <div key="doc" ref=${ref}></div>
+    ${!bytes&&html`<${Empty} title=${empty||'Файл не завантажено'}/>`}
+    ${busy&&html`<div class="docx-busy"><${Spinner} dark=${true}/> Готую перегляд…</div>`}
+    ${err&&html`<div class="note red" style="margin:12px">${err}</div>`}
+  </div>`;
+}
+
+function TemplatesList(){
+  const {role, d} = useCtx();
+  const [rows,setRows]=useState(null); const [q,setQ]=useState(''); const [st,setSt]=useState(''); const [prj,setPrj]=useState('');
+  const [add,setAdd]=useState(false); const [guide,setGuide]=useState(false);
+  const load=async()=>{ const {data,error}=await sb.from('templates').select('*, template_versions(id,version_no,status,tested_at,activated_at,created_at)').order('name'); if(error) toastErr(error); setRows(data||[]); };
+  useEffect(()=>{ load(); },[]);
+  const all=(rows||[]).map(t=>({...t, st:tplState(t)}));
+  const list=all.filter(t=>(st?t.st.k===st:t.st.k!=='archived') && (!prj||t.project_id===prj) && fold([t.name,t.scenario,t.description].join(' ')).includes(fold(q.trim())));
+  const cnt=k=>all.filter(t=>t.st.k===k).length;
+  const upd=t=>{ const ds=(t.template_versions||[]).map(v=>v.activated_at||v.created_at).filter(Boolean).sort(); return ds.length?fmtTs(ds[ds.length-1]):''; };
+  return html`
+    <div class="head"><div><h1>Шаблони</h1><p>DOCX зі змінними {{полями}}: версії, тест, публікація</p></div>
+      <div class="acts"><button class="btn" onClick=${()=>setGuide(true)}>Довідник полів</button>
+        ${can(role,'legal')&&html`<button class="btn primary" onClick=${()=>setAdd(true)}>+ Новий шаблон</button>`}</div></div>
+    <div class="card" style="padding:12px 14px;margin-bottom:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <input class="inp" style="flex:1;min-width:220px" placeholder="Пошук за назвою, роллю, описом…" value=${q} onInput=${e=>setQ(e.target.value)}/>
+      ${[['','Робочі',all.length-cnt('archived')],['active','Активні',cnt('active')],['draft','Чернетки',cnt('draft')],['archived','Архівні',cnt('archived')]].map(([k,l,n])=>html`<span key=${k} class=${'fchip'+(st===k?' on':'')} onClick=${()=>setSt(k)}>${l} ${n}</span>`)}
+      <div style="width:230px"><${SearchSelect} value=${prj} options=${d.projects.map(p=>({v:p.id,l:projectLabel(p)}))} onChange=${setPrj} placeholder="Усі проєкти"/></div>
+    </div>
+    <div class="card"><div class="tbl-wrap">${rows===null?html`<${Loading}/>`:list.length===0?html`<${Empty} title=${all.length?'Нічого не знайдено':'Шаблонів ще немає'}>${!all.length&&can(role,'legal')?'Натисніть «+ Новий шаблон» і завантажте DOCX зі змінними {{contract_number}}, {{contractor_name}} тощо.':''}<//>`:html`<table>
+      <thead><tr><th>Назва</th><th>Тип договору</th><th>Проєкт</th><th>Контрагент</th><th>Версія</th><th>Статус</th><th>Оновлено</th></tr></thead>
+      <tbody>${list.map(t=>html`<tr key=${t.id} class="click" onClick=${()=>go('templates/'+t.id)}>
+        <td><b>${t.name}</b>${(t.scenario||t.description)&&html`<div class="small muted ell">${[t.scenario,t.description].filter(Boolean).join(' • ')}</div>`}</td>
+        <td class="nw">${(d.typesBy[t.contract_type_id]||{}).name||'—'}</td><td class="nw">${t.project_id?(d.projectsBy[t.project_id]||{}).short_code||(d.projectsBy[t.project_id]||{}).full_name:'будь-який'}</td>
+        <td class="nw">${CP_KINDS[t.cp_kind]||'—'}</td>
+        <td class="nw">${t.st.act?'v'+t.st.act.version_no:'—'}${t.st.dr&&html` <${Chip} c="amber">чернетка v${t.st.dr.version_no}<//>`}</td>
+        <td><${Chip} c=${t.st.c}>${t.st.l}<//></td><td class="nw muted">${upd(t)}</td></tr>`)}</tbody></table>`}</div></div>
+    ${add&&html`<${TemplateNewModal} onClose=${()=>setAdd(false)}/>`}
+    ${guide&&html`<${FieldGuide} onClose=${()=>setGuide(false)}/>`}`;
+}
+
+function TplMetaFields({r, set}){
+  const {d} = useCtx();
+  return html`
+    <${Field} label="Назва" req><input value=${r.name} placeholder="Напр.: Послуги — ФОП — UNICEF#3" onInput=${e=>set('name',e.target.value)}/><//>
+    <div class="row2">
+      <${Field} label="Тип договору"><${SearchSelect} value=${r.contract_type_id} options=${d.types.filter(x=>x.active||x.id===r.contract_type_id).map(x=>({v:x.id,l:x.name}))} onChange=${v=>set('contract_type_id',v)} placeholder="будь-який"/><//>
+      <${Field} label="Тип документа" hint="Скорочення йде у фінальну назву файлу"><${SearchSelect} value=${r.doc_type_id} options=${d.docTypes.filter(x=>x.active||x.id===r.doc_type_id).map(x=>({v:x.id,l:x.name}))} onChange=${v=>set('doc_type_id',v)} placeholder="Договір"/><//>
+    </div>
+    <div class="row2">
+      <${Field} label="Проєкт" hint="Порожньо — для будь-якого проєкту"><${SearchSelect} value=${r.project_id} options=${d.projects.filter(p=>p.active||p.id===r.project_id).map(p=>({v:p.id,l:projectLabel(p)}))} onChange=${v=>set('project_id',v)} placeholder="будь-який"/><//>
+      <${Field} label="Тип контрагента"><select value=${r.cp_kind} onChange=${e=>set('cp_kind',e.target.value)}>${Object.entries(CP_KINDS).map(([k,l])=>html`<option value=${k}>${l}</option>`)}</select><//>
+    </div>
+    <${Field} label="Роль / сценарій" hint="Напр.: тьютор, вихователь «Іскорки суперсил»"><input value=${r.scenario} onInput=${e=>set('scenario',e.target.value)}/><//>
+    <${Field} label="Опис"><textarea rows="2" value=${r.description} onInput=${e=>set('description',e.target.value)}></textarea><//>`;
+}
+const tplMetaPayload = r => ({name:r.name.trim(), contract_type_id:r.contract_type_id||null, doc_type_id:r.doc_type_id||null, project_id:r.project_id||null,
+  cp_kind:r.cp_kind||'any', scenario:(r.scenario||'').trim()||null, description:(r.description||'').trim()||null});
+
+function TemplateNewModal({onClose, copy}){
+  const {d} = useCtx();
+  const [file,setFile]=useState(null); const [ins,setIns]=useState(copy?{errors:[], placeholders:copy.version.placeholders||[]}:null); const [busy,setBusy]=useState(false);
+  const [r,setR]=useState(()=>copy
+    ? {name:'Копія — '+copy.tpl.name, contract_type_id:copy.tpl.contract_type_id||'', doc_type_id:copy.tpl.doc_type_id||'', project_id:copy.tpl.project_id||'', cp_kind:copy.tpl.cp_kind||'any', scenario:copy.tpl.scenario||'', description:copy.tpl.description||''}
+    : {name:'', contract_type_id:'', doc_type_id:(d.docTypes.find(x=>x.name==='Договір')||{}).id||'', project_id:'', cp_kind:'any', scenario:'', description:''});
+  const set=(k,v)=>setR(p=>({...p,[k]:v}));
+  const onFile=async e=>{ const f=e.target.files[0]; e.target.value=''; if(!f) return;
+    if(!/\.docx$/i.test(f.name)) return pushToast('Потрібен файл .docx. Файл .doc відкрийте у Word і збережіть як «Документ Word (.docx)»','err');
+    if(f.size>15*1024*1024) return pushToast('Файл більший за 15 МБ','err');
+    setBusy(true);
+    try{ const lib=await loadDocgen(); const buf=new Uint8Array(await f.arrayBuffer()); setIns(inspectDocx(lib, buf)); setFile({f, buf}); if(!r.name.trim()) set('name', f.name.replace(/\.docx$/i,'')); }
+    catch(err){ pushToast('Не вдалося прочитати файл: '+errText(err),'err'); }
+    setBusy(false); };
+  const create=async()=>{
+    if(!r.name.trim()) return pushToast('Вкажіть назву шаблону','err');
+    if(!copy&&!file) return pushToast('Оберіть DOCX-файл','err');
+    if(ins&&ins.errors.length) return pushToast('Спершу виправте помилки в шаблоні','err');
+    setBusy(true);
+    try{
+      const clauses=await loadClausesAll(), id=crypto.randomUUID();
+      let file_path, file_name, size;
+      if(copy){ ({file_path, file_name, size}=copy.version); }
+      else { file_path=`${id}/v1_${Date.now()}_${safeName(file.f.name)}`; file_name=file.f.name; size=file.f.size;
+        const {error:ue}=await sb.storage.from('templates').upload(file_path, file.f, {contentType:DOCX_MIME, upsert:false}); if(ue) throw ue;
+        tplFileCache.set('templates:'+file_path, file.buf); }
+      const placeholders=(ins.placeholders||[]).map(p=>({name:p.name, prefix:p.prefix}));
+      const mapping=copy ? (copy.version.mapping||{}) : autoMapAll(placeholders, clauses, {});
+      const {error}=await sb.rpc('create_template',{p:{...tplMetaPayload(r), id, file_path, file_name, size, placeholders, mapping,
+        source: copy?'Копія шаблону «'+copy.tpl.name+'» v'+copy.version.version_no:'Імпорт файлу '+file_name}});
+      if(error) throw error;
+      pushToast(copy?'Копію створено':'Шаблон створено — перевірте зіставлення полів і зробіть тест','ok'); onClose(); go('templates/'+id);
+    } catch(err){ toastErr(err); }
+    setBusy(false); };
+  const unm = ins&&!ins.errors.length ? unmappedTags(ins.placeholders, autoMapAll(ins.placeholders, [], {})) : [];
+  const nTags = ins ? ins.placeholders.filter(p=>p.prefix!=='/').length : 0;
+  return html`<${Modal} wide=${true} title=${copy?'Копія шаблону':'Новий шаблон'} sub=${copy?copy.tpl.name+' • v'+copy.version.version_no:'Завантажте DOCX зі змінними {{…}}'} onClose=${busy?null:onClose}
+    foot=${html`<button class="btn" onClick=${onClose} disabled=${busy}>Скасувати</button><button class="btn primary" onClick=${create} disabled=${busy||(!copy&&!file)||(ins&&ins.errors.length>0)}>${busy?html`<${Spinner}/>`:'Створити чернетку v1'}</button>`}>
+    ${!copy&&html`<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px">
+      <label class="btn primary">${busy&&!file?html`<${Spinner}/>`:(file?'Інший файл':'Обрати DOCX')}<input type="file" accept=".docx" style="display:none" onChange=${onFile}/></label>
+      ${file?html`<span>📄 ${file.f.name} <span class="muted">${fmtSize(file.f.size)}</span></span>`:html`<span class="muted small">Word 2007+ (.docx), до 15 МБ</span>`}</div>`}
+    ${ins&&ins.errors.length>0&&html`<div class="note red" style="margin-bottom:14px"><b>У шаблоні помилки — виправте у Word і завантажте знову:</b><ul style="margin:6px 0 0;padding-left:18px">${ins.errors.map(e=>html`<li>${e}</li>`)}</ul></div>`}
+    ${ins&&!ins.errors.length&&html`<div class=${'note'+(unm.length?' amber':'')} style="margin-bottom:14px">
+      Знайдено полів: <b>${nTags}</b>.${unm.length?html` Не розпізнано автоматично: <b>${unm.join(', ')}</b> — зіставите на сторінці шаблону.`:' Усі розпізнано автоматично.'}
+      ${nTags===0&&html`<div style="margin-top:4px">У файлі немає жодного {{поля}} — шаблон буде статичним текстом.</div>`}</div>`}
+    <${TplMetaFields} r=${r} set=${set}/>
+  <//>`;
+}
+
+function TemplateMetaModal({t, onClose, onSaved}){
+  const [r,setR]=useState({name:t.name||'', contract_type_id:t.contract_type_id||'', doc_type_id:t.doc_type_id||'', project_id:t.project_id||'', cp_kind:t.cp_kind||'any', scenario:t.scenario||'', description:t.description||''});
+  const [busy,setBusy]=useState(false); const set=(k,v)=>setR(p=>({...p,[k]:v}));
+  const save=async()=>{ if(!r.name.trim()) return pushToast('Вкажіть назву','err'); setBusy(true);
+    const {error}=await sb.from('templates').update(tplMetaPayload(r)).eq('id',t.id); setBusy(false);
+    if(error) return toastErr(error); pushToast('Збережено','ok'); onSaved(); };
+  return html`<${Modal} wide=${true} title="Параметри шаблону" onClose=${onClose} foot=${html`<button class="btn" onClick=${onClose}>Скасувати</button><button class="btn primary" onClick=${save} disabled=${busy}>Зберегти</button>`}>
+    <${TplMetaFields} r=${r} set=${set}/><//>`;
+}
+
+function TemplatePage({id, vq}){
+  const {role, d} = useCtx(); const legal=can(role,'legal');
+  const [t,setT]=useState(null); const [vs,setVs]=useState([]); const [clauses,setClauses]=useState([]);
+  const [bytes,setBytes]=useState(null); const [pv,setPv]=useState(null); const [fileErr,setFileErr]=useState('');
+  const [dlg,setDlg]=useState(null); const [busy,setBusy]=useState(false); const [errs,setErrs]=useState(null);
+  const load=async()=>{
+    const [a,b,c]=await Promise.all([sb.from('templates').select('*').eq('id',id).maybeSingle(), sb.from('template_versions').select('*').eq('template_id',id).order('version_no',{ascending:false}), loadClausesAll().catch(e=>{ toastErr(e); return []; })]);
+    if(a.error) toastErr(a.error); if(b.error) toastErr(b.error);
+    setT(a.data||false); setVs(b.data||[]); setClauses(c); };
+  useEffect(()=>{ load(); },[id]);
+  const v = vs.find(x=>String(x.version_no)===String(vq||'')) || vs.find(x=>x.status==='draft') || vs.find(x=>x.status==='active') || vs[0];
+  useEffect(()=>{ if(!v||!v.file_path){ setBytes(null); setPv(null); return; } let dead=false; setBytes(null); setPv(null); setFileErr('');
+    (async()=>{ try{ const b=await loadTemplateFile(v.file_path); const lib=await loadDocgen(); if(dead) return; setBytes(b); setPv(previewDocx(lib,b)); } catch(e){ if(!dead) setFileErr(errText(e)); } })();
+    return ()=>{ dead=true; }; },[v&&v.id, v&&v.file_path]);
+  if(t===null) return html`<${Loading}/>`;
+  if(t===false||!v) return html`<${Empty} title="Шаблон не знайдено"><a href="#/templates">До шаблонів</a><//>`;
+  const isDraft=v.status==='draft', hasDraft=vs.some(x=>x.status==='draft'), unm=unmappedTags(v.placeholders, v.mapping);
+  const act=clauses.filter(c=>c.status==='active');
+  const ctx=sampleContext({org:d.org, clauses:act, kind:t.cp_kind, project:d.projectsBy[t.project_id], typeId:t.contract_type_id});
+  const used=clausesForMapping(v.mapping, ctx);
+  const run=async(fn, ok)=>{ setBusy(true); try{ await fn(); if(ok) pushToast(ok,'ok'); } catch(e){ toastErr(e); } setBusy(false); };
+  const publish=()=>run(async()=>{ const {error}=await sb.rpc('publish_template_version',{p_version:v.id}); if(error) throw error; setQuery({v:''}); await load(); }, 'Опубліковано v'+v.version_no+' — її використовуватимуть нові документи');
+  const newVersion=()=>run(async()=>{ const {error}=await sb.rpc('new_template_version',{p_template:t.id}); if(error) throw error; setQuery({v:''}); await load(); }, 'Створено чернетку нової версії');
+  const archiveVersion=()=>{ if(!confirm('Зняти v'+v.version_no+' з використання? Нові документи за цим шаблоном не формуватимуться, доки не опублікуєте нову версію.')) return;
+    run(async()=>{ const {error}=await sb.rpc('archive_template_version',{p_version:v.id}); if(error) throw error; await load(); }, 'Версію архівовано'); };
+  const toggleArchived=()=>run(async()=>{ const {error}=await sb.from('templates').update({archived:!t.archived}).eq('id',t.id); if(error) throw error; await load(); }, t.archived?'Шаблон повернуто з архіву':'Шаблон переміщено в архів');
+  const delDraft=()=>{ const only=vs.length===1;
+    if(!confirm(only?'Видалити шаблон «'+t.name+'» разом із чернеткою?':'Видалити чернетку v'+v.version_no+'?')) return;
+    run(async()=>{ const {error}= only ? await sb.from('templates').delete().eq('id',t.id) : await sb.from('template_versions').delete().eq('id',v.id); if(error) throw error;
+      if(only) go('templates'); else { setQuery({v:''}); await load(); } }, only?'Шаблон видалено':'Чернетку видалено'); };
+  const delTemplate=()=>{ if(!confirm('Видалити шаблон «'+t.name+'» з усіма версіями? Якщо за ним уже сформовано документи, система не дасть видалити — тоді перемістіть його в архів.')) return;
+    run(async()=>{ const {error}=await sb.from('templates').delete().eq('id',t.id); if(error) throw error; go('templates'); }, 'Шаблон видалено'); };
+  const replaceFile=async e=>{ const f=e.target.files[0]; e.target.value=''; if(!f) return;
+    if(!/\.docx$/i.test(f.name)) return pushToast('Потрібен файл .docx','err');
+    setBusy(true);
+    try{ const lib=await loadDocgen(); const buf=new Uint8Array(await f.arrayBuffer()); const ins=inspectDocx(lib, buf);
+      if(ins.errors.length){ setErrs(ins.errors); setBusy(false); return; }
+      const path=`${t.id}/v${v.version_no}_${Date.now()}_${safeName(f.name)}`;
+      const {error:ue}=await sb.storage.from('templates').upload(path, f, {contentType:DOCX_MIME, upsert:false}); if(ue) throw ue;
+      tplFileCache.set('templates:'+path, buf);
+      const placeholders=ins.placeholders.map(p=>({name:p.name, prefix:p.prefix})), names=new Set(placeholders.map(p=>p.name));
+      const keep=Object.fromEntries(Object.entries(v.mapping||{}).filter(([k])=>names.has(k)));
+      const {error}=await sb.from('template_versions').update({file_path:path, file_name:f.name, size:f.size, placeholders, mapping:autoMapAll(placeholders, clauses, keep)}).eq('id',v.id);
+      if(error) throw error; pushToast('Файл замінено — зробіть тест ще раз','ok'); await load();
+    } catch(err){ toastErr(err); }
+    setBusy(false); };
+  const saveMapping=async m=>{ const {error}=await sb.from('template_versions').update({mapping:m}).eq('id',v.id); if(error){ toastErr(error); return false; } pushToast('Зіставлення збережено','ok'); await load(); return true; };
+  const download=()=>bytes&&downloadBlob(new Blob([bytes],{type:DOCX_MIME}), v.file_name||(t.name+'.docx'));
+  const steps=[[!!v.file_path,'DOCX-файл завантажено','Завантажте DOCX'], [!unm.length,'Усі поля зіставлено','Не зіставлено: '+unm.join(', ')], [!!v.tested_at, 'Тест пройдено'+(v.tested_at?' '+fmtDT(v.tested_at):''), 'Зробіть «Тест шаблону»']];
+  return html`
+    <div class="head">
+      <div style="min-width:0"><div class="small" style="margin-bottom:4px"><a href="#/templates">← Шаблони</a></div>
+        <h1>Шаблон: ${t.name}</h1>
+        <p>Редакція v.${v.version_no} • ${TPL_VST[v.status].l}${t.archived?' • шаблон в архіві':''}</p>
+        <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap">${vs.slice().reverse().map(x=>html`<span key=${x.id} class=${'fchip'+(x.id===v.id?' on':'')} onClick=${()=>setQuery({v:x.version_no})} title=${TPL_VST[x.status].l}>v${x.version_no}${x.status!=='archived'?html` <span class=${'dot '+x.status}></span>`:''}</span>`)}</div></div>
+      <div class="acts">
+        <button class="btn" onClick=${()=>setDlg('test')} disabled=${!bytes}>Тест шаблону</button>
+        ${legal&&isDraft&&html`<button class="btn primary" onClick=${publish} disabled=${busy||unm.length>0||!v.tested_at}>Опублікувати</button>`}
+        ${legal&&!isDraft&&!hasDraft&&html`<button class="btn primary" onClick=${newVersion} disabled=${busy}>Нова версія</button>`}
+        <${Dropdown} label="⋯" items=${[
+          {l:'Завантажити DOCX', on:download},
+          {l:'Довідник полів', on:()=>setDlg('guide')},
+          {l:'Параметри шаблону', on:()=>setDlg('meta'), hidden:!legal},
+          {l:'Створити копію шаблону', on:()=>setDlg('copy'), hidden:!legal},
+          {l:'Зняти активну версію з використання', on:archiveVersion, hidden:!legal||v.status!=='active'},
+          {l:t.archived?'Повернути шаблон з архіву':'Перемістити шаблон в архів', on:toggleArchived, hidden:!legal},
+          {l:vs.length===1?'Видалити шаблон':'Видалити чернетку', on:delDraft, danger:true, hidden:!legal||!isDraft},
+          {l:'Видалити шаблон', on:delTemplate, danger:true, hidden:role!=='admin'||isDraft&&vs.length===1},
+        ]}/>
+      </div>
+    </div>
+    ${isDraft&&html`<div class="card pad" style="margin-bottom:16px;display:flex;gap:18px;flex-wrap:wrap;align-items:center">
+      <b>Щоб опублікувати:</b>${steps.map(([ok,y,n],i)=>html`<span key=${i} class=${ok?'okstep':'nostep'}>${ok?'✓':'○'} ${ok?y:n}</span>`)}
+      ${legal&&html`<label class="btn sm" style="margin-left:auto">${busy?html`<${Spinner} dark=${true}/>`:'Замінити файл'}<input type="file" accept=".docx" style="display:none" onChange=${replaceFile} disabled=${busy}/></label>`}</div>`}
+    ${!isDraft&&v.status==='active'&&html`<div class="note" style="margin-bottom:16px">Активна версія. Нові документи формуються за нею; уже сформовані документи лишаються прив’язаними до своєї версії. Щоб змінити текст — «Нова версія», замініть файл, пройдіть тест і опублікуйте.</div>`}
+    ${v.status==='archived'&&html`<div class="note gray" style="margin-bottom:16px">Архівна версія — лише для перегляду. Документи, сформовані за нею, лишаються прив’язаними до неї.</div>`}
+    <div class="grid-main">
+      <div class="card pad"><div class="ctitle"><h3 style="margin:0">DOCX-шаблон</h3><span class="small muted ell">${v.file_name||''}</span></div>
+        ${fileErr?html`<div class="note red">Файл: ${fileErr}</div>`:html`<${DocxView} key=${v.id+':'+JSON.stringify(v.mapping||{})} bytes=${pv} classify=${tagClassify(v.mapping)} height="72vh"/>`}
+        <p class="small" style="margin-top:12px">Форматування зберігається з DOCX. Текст редагуйте у Word і завантажуйте новою версією. <span class="ph f">поле</span> <span class="ph c">положення</span> <span class="ph s">умова</span> <span class="ph x">не зіставлено</span></p></div>
+      <div class="stack">
+        <div class="card pad"><div class="ctitle"><h3 style="margin:0">Поля та блоки</h3><a href="javascript:void 0" class="small" onClick=${()=>setDlg('guide')}>Довідник полів</a></div>
+          <${MappingPanel} key=${v.id+':'+(v.tested_at||'')+JSON.stringify(v.mapping||{})} v=${v} clauses=${clauses} editable=${legal&&isDraft} onSave=${saveMapping}/></div>
+        <div class="card pad"><h3>Бібліотека положень</h3>
+          ${used.length?used.map(c=>html`<div key=${c.id} class="small" style="padding:3px 0">• ${c.name} <span class="muted">v${c.version_no}</span></div>`):html`<p class="small">${Object.values(v.mapping||{}).some(m=>m.type==='clause'||m.type==='category')?'Для параметрів шаблону зараз немає активних положень — вони підставляться за проєктом конкретного договору.':'Шаблон не використовує положень з бібліотеки.'}</p>`}
+          ${!t.project_id&&used.length>0&&html`<p class="small muted" style="margin-top:8px">Показано для будь-якого проєкту; у договорі положення підбираються за його проєктом, типом і датою.</p>`}</div>
+        <div class="card pad"><h3>Про версію</h3><div class="kv small" style="grid-template-columns:110px 1fr;gap:8px 12px">
+          <div class="k">Джерело</div><div class="v">${v.source||'—'}</div>
+          <div class="k">Створено</div><div class="v">${fmtDT(v.created_at)} · ${userLabel(d.usersBy[v.created_by])||'—'}</div>
+          ${v.tested_at&&html`<div class="k">Тест</div><div class="v">${fmtDT(v.tested_at)} · ${userLabel(d.usersBy[v.tested_by])||'—'}</div>`}
+          ${v.activated_at&&html`<div class="k">Опубліковано</div><div class="v">${fmtDT(v.activated_at)} · ${userLabel(d.usersBy[v.activated_by])||'—'}</div>`}
+          <div class="k">Параметри</div><div class="v">${[(d.typesBy[t.contract_type_id]||{}).name, t.project_id?projectLabel(d.projectsBy[t.project_id]):'будь-який проєкт', CP_KINDS[t.cp_kind], t.scenario].filter(Boolean).join(' • ')}</div>
+        </div></div>
+        ${can(role,'legal')&&html`<details class="card pad"><summary class="b" style="cursor:pointer">Історія змін шаблону</summary><div style="margin-top:12px"><${EntityHistory} entity="templates" id=${t.id} withFiles=${true}/></div></details>`}
+      </div>
+    </div>
+    ${dlg==='test'&&html`<${TemplateTestModal} t=${t} v=${v} bytes=${bytes} clauses=${clauses} onClose=${()=>setDlg(null)} onTested=${()=>{ setDlg(null); load(); }}/>`}
+    ${dlg==='guide'&&html`<${FieldGuide} onClose=${()=>setDlg(null)}/>`}
+    ${dlg==='meta'&&html`<${TemplateMetaModal} t=${t} onClose=${()=>setDlg(null)} onSaved=${()=>{ setDlg(null); load(); }}/>`}
+    ${dlg==='copy'&&html`<${TemplateNewModal} copy=${{tpl:t, version:v}} onClose=${()=>setDlg(null)}/>`}
+    ${errs&&html`<${Modal} title="Новий файл не прийнято" onClose=${()=>setErrs(null)} foot=${html`<button class="btn primary" onClick=${()=>setErrs(null)}>Зрозуміло</button>`}>
+      <p style="color:var(--text);margin-bottom:8px">Виправте у Word і завантажте знову:</p><ul style="margin:0;padding-left:18px">${errs.map(e=>html`<li>${e}</li>`)}</ul><//>`}`;
+}
+
+function MappingPanel({v, clauses, editable, onSave}){
+  const [m,setM]=useState(()=>({...(v.mapping||{})})); const [busy,setBusy]=useState(false);
+  const dirty=JSON.stringify(m)!==JSON.stringify(v.mapping||{});
+  const seen=new Set(), tags=[], conds=[];
+  (v.placeholders||[]).forEach(p=>{ if(p.prefix==='/') return; const k=p.prefix+p.name; if(seen.has(k)) return; seen.add(k);
+    if((p.prefix==='#'||p.prefix==='^') && TPL_FLAG_SET.has(p.name)) conds.push(p); else tags.push(p); });
+  const codes=[...new Map(clauses.map(c=>[c.code,c])).values()];
+  const setT=(name, val)=>setM(p=>{ const n={...p}; if(val) n[name]=val; else delete n[name]; return n; });
+  const fieldOpts=TPL_FIELDS.map(f=>({v:f.k, l:f.l, sub:'{{'+f.k+'}} • '+TPL_GROUPS[f.g]}));
+  const save=async()=>{ setBusy(true); await onSave(cleanMapping(m)); setBusy(false); };
+  if(!tags.length&&!conds.length) return html`<p class="small">У файлі немає полів {{…}}.</p>`;
+  return html`<div>
+    ${tags.map(p=>{ const cur=m[p.name]; const bad=!mapComplete(cur);
+      return html`<div key=${p.prefix+p.name} class=${'mrow'+(bad?' bad':'')}>
+        <div class="mtag"><span class=${'ph '+(bad?'x':cur.type==='clause'||cur.type==='category'?'c':'f')}>{{${p.prefix}${p.name}}}</span></div>
+        ${editable?html`<div class="mctl">
+          <select value=${cur?cur.type:''} onChange=${e=>{ const ty=e.target.value; setT(p.name, !ty?null:ty==='field'?{type:'field', field:(autoMapTag(p.name,[])||{}).field||''}:ty==='category'?{type:'category', category:'other'}:ty==='clause'?{type:'clause', code:''}:ty==='text'?{type:'text', text:''}:{type:'empty'}); }}>
+            <option value="">— не зіставлено —</option>${Object.entries(MAP_TYPES).map(([k,l])=>html`<option value=${k}>${l}</option>`)}</select>
+          ${cur&&cur.type==='field'&&html`<${SearchSelect} value=${cur.field} options=${fieldOpts} onChange=${x=>setT(p.name,{type:'field', field:x})} allowClear=${false}/>`}
+          ${cur&&cur.type==='category'&&html`<select value=${cur.category} onChange=${e=>setT(p.name,{type:'category', category:e.target.value})}>${Object.entries(CLAUSE_CATS).map(([k,l])=>html`<option value=${k}>${l}</option>`)}</select>`}
+          ${cur&&cur.type==='clause'&&html`<${SearchSelect} value=${cur.code} options=${codes.map(c=>({v:c.code, l:c.code, sub:c.name}))} onChange=${x=>setT(p.name,{type:'clause', code:x})} allowClear=${false} placeholder="— код положення —"/>`}
+          ${cur&&cur.type==='text'&&html`<textarea rows="2" value=${cur.text||''} onInput=${e=>setT(p.name,{type:'text', text:e.target.value})}></textarea>`}
+        </div>`:html`<div class="small">${cur?(cur.type==='field'?tagLabel(p.name,m):cur.type==='text'?'Текст: «'+(cur.text||'').slice(0,60)+'»':cur.type==='empty'?'Порожньо':tagLabel(p.name,m)):html`<span style="color:var(--red-t)">не зіставлено</span>`}</div>`}
+      </div>`; })}
+    ${conds.length>0&&html`<div class="small muted" style="margin:12px 0 6px;font-weight:700">Умовні блоки</div>${conds.map(p=>html`<div key=${p.prefix+p.name} class="mrow"><div class="mtag"><span class="ph s">{{${p.prefix}${p.name}}}</span></div><div class="small">${p.prefix==='^'?'якщо НЕ: ':'якщо: '}${TPL_FLAGS.find(f=>f.k===p.name).l}</div></div>`)}`}
+    ${editable&&html`<div style="display:flex;gap:8px;align-items:center;margin-top:12px"><button class="btn primary sm" onClick=${save} disabled=${!dirty||busy}>Зберегти зіставлення</button>${dirty&&html`<span class="small muted">після збереження тест потрібно пройти знову</span>`}</div>`}
+  </div>`;
+}
+
+const searchContracts = async q => {
+  let x=sb.from('v_contracts').select('id,number,title,cp_name').order('created_at',{ascending:false}).limit(20);
+  if(q&&q.trim()) x=x.like('search_text','%'+fold(q.trim())+'%');
+  const {data,error}=await x; if(error) throw error;
+  return (data||[]).map(c=>({v:c.id, l:(c.number||'без номера')+' — '+(c.cp_name||''), sub:c.title}));
+};
+async function loadDocData(c, d){
+  const [cpR, orgR, clR, sjR] = await Promise.all([
+    c.counterparty_id ? sb.from('counterparties').select('*').eq('id',c.counterparty_id).maybeSingle() : Promise.resolve({data:null}),
+    sb.from('org_settings').select('data').eq('id',1).maybeSingle(),
+    sb.from('clauses').select('*').eq('status','active'),
+    c.subject_ref_id ? sb.from('subjects').select('*').eq('id',c.subject_ref_id).maybeSingle() : Promise.resolve({data:null})]);
+  const err=[cpR,orgR,clR,sjR].find(x=>x.error); if(err) throw err.error;
+  const cp=cpR.data||{};
+  return docContext({contract:c, cp, lf:d.formsBy[cp.legal_form_id]||null, project:d.projectsBy[c.project_id]||{}, org:(orgR.data&&orgR.data.data)||{},
+    subj:sjR.data, clauses:clR.data||[], typeName:(d.typesBy[c.type_id]||{}).name||c.type_name||'', lawyerName:c.lawyer_name||''});
+}
+function MissingNote({missing, mapping}){
+  if(!missing||!missing.length) return html`<div class="note" style="margin-bottom:12px">✓ Усі поля заповнено даними.</div>`;
+  const groups={}; missing.forEach(tg=>{ const w=tagWhere(tg,mapping)||'шаблон (незіставлені поля)'; (groups[w]=groups[w]||[]).push(tagLabel(tg,mapping)); });
+  return html`<div class="note amber" style="margin-bottom:12px"><b>Без даних — у документі буде порожньо:</b>
+    ${Object.entries(groups).map(([w,l])=>html`<div key=${w} style="margin-top:4px">${l.join(', ')} <span style="opacity:.8">— заповніть: ${w}</span></div>`)}</div>`;
+}
+
+function TemplateTestModal({t, v, bytes, clauses, onClose, onTested}){
+  const {d, role} = useCtx();
+  const [src,setSrc]=useState('sample'); const [cid,setCid]=useState(''); const [clabel,setClabel]=useState('');
+  const [res,setRes]=useState(null); const [busy,setBusy]=useState(false); const [err,setErr]=useState([]);
+  const run=async(which, id)=>{ setBusy(true); setErr([]); setRes(null);
+    try{ const lib=await loadDocgen(); let ctx;
+      if(which==='contract'){ const {data:c,error}=await sb.from('v_contracts').select('*').eq('id',id).single(); if(error) throw error; ctx=await loadDocData(c, d); }
+      else ctx=sampleContext({org:d.org, clauses:clauses.filter(c=>c.status==='active'), kind:t.cp_kind, project:d.projectsBy[t.project_id], typeId:t.contract_type_id, typeName:(d.typesBy[t.contract_type_id]||{}).name});
+      setRes(renderDocx(lib, bytes, v.mapping, ctx));
+    } catch(e){ setErr(e&&e.properties ? docxErrors(e) : [errText(e)]); }
+    setBusy(false); };
+  useEffect(()=>{ run('sample'); },[]);
+  const mark=async()=>{ setBusy(true); const {error}=await sb.rpc('mark_template_tested',{p_version:v.id}); setBusy(false);
+    if(error) return toastErr(error); pushToast('Тест зафіксовано — версію можна публікувати','ok'); onTested(); };
+  const fname=(t.name+' — тест v'+v.version_no).replace(/[\\\/:*?"<>|]+/g,'-')+'.docx';
+  return html`<${Modal} xwide=${true} title=${'Тест шаблону • v'+v.version_no} sub=${t.name} onClose=${onClose}
+    foot=${html`${res&&html`<button class="btn" style="margin-right:auto" onClick=${()=>downloadBlob(new Blob([res.out],{type:DOCX_MIME}), fname)}>Завантажити DOCX</button>`}
+      <button class="btn" onClick=${onClose}>Закрити</button>
+      ${can(role,'legal')&&v.status==='draft'&&html`<button class="btn primary" onClick=${mark} disabled=${busy||!res}>${v.tested_at?'Підтвердити тест ще раз':'Документ правильний — позначити як перевірений'}</button>`}`}>
+    <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:14px">
+      <span class=${'fchip'+(src==='sample'?' on':'')} onClick=${()=>{ setSrc('sample'); run('sample'); }}>Тестові дані</span>
+      <span class=${'fchip'+(src==='contract'?' on':'')} onClick=${()=>setSrc('contract')}>Дані договору</span>
+      ${src==='contract'&&html`<div style="width:380px"><${AsyncSelect} value=${cid} label=${clabel} search=${searchContracts} onChange=${(x,o)=>{ setCid(x); setClabel(o?o.l:''); if(x) run('contract', x); }} placeholder="Оберіть договір"/></div>`}
+      ${busy&&html`<${Spinner} dark=${true}/>`}
+    </div>
+    ${err.length>0&&html`<div class="note red" style="margin-bottom:12px"><b>Документ не сформовано:</b><ul style="margin:6px 0 0;padding-left:18px">${err.map(e=>html`<li>${e}</li>`)}</ul></div>`}
+    ${res&&html`<${MissingNote} missing=${res.missing} mapping=${v.mapping}/><${DocxView} bytes=${res.out} height="62vh"/>`}
+  <//>`;
+}
+
+function FieldGuide({onClose}){
+  const [q,setQ]=useState('');
+  const copy=k=>{ try{ navigator.clipboard.writeText('{{'+k+'}}'); pushToast('Скопійовано {{'+k+'}}','ok'); }catch(e){} };
+  const match=f=>fold(f.k+' '+f.l+' '+(f.a||[]).join(' ')).includes(fold(q.trim()));
+  return html`<${Modal} wide=${true} title="Довідник полів шаблону" sub="Клік по полю — копіює його; вставте у Word на потрібне місце" onClose=${onClose}>
+    <input class="inp" placeholder="Пошук поля…" value=${q} onInput=${e=>setQ(e.target.value)} style="margin-bottom:12px"/>
+    ${TPL_GROUPS.map((g,gi)=>{ const fs=TPL_FIELDS.filter(f=>f.g===gi&&match(f)); if(!fs.length) return null;
+      return html`<div key=${g} style="margin-bottom:14px"><div class="b" style="margin-bottom:6px">${g}</div><table class="small"><tbody>
+        ${fs.map(f=>html`<tr key=${f.k}><td class="nw" style="width:1%"><span class="ph f" style="cursor:pointer" onClick=${()=>copy(f.k)}>{{${f.k}}}</span></td><td>${f.l}${f.block?html` <span class="muted">· блок</span>`:''}${f.a&&f.a.length?html`<div class="muted">також: ${f.a.join(', ')}</div>`:''}</td></tr>`)}</tbody></table></div>`; })}
+    <div class="b" style="margin:4px 0 6px">Умовні блоки</div>
+    <div class="note gray small" style="margin-bottom:8px;font-family:ui-monospace,Menlo,monospace;white-space:pre-wrap">{{#is_fop}}Текст лише для ФОП{{/is_fop}}
+{{^is_fop}}Текст для всіх, крім ФОП{{/is_fop}}</div>
+    <table class="small" style="margin-bottom:14px"><tbody>${TPL_FLAGS.map(f=>html`<tr key=${f.k}><td class="nw" style="width:1%"><span class="ph s">{{#${f.k}}}</span></td><td>${f.l}</td></tr>`)}</tbody></table>
+    <div class="b" style="margin:4px 0 6px">Положення з бібліотеки</div>
+    <p class="small" style="margin-bottom:6px">Тег із закінченням <b>_clause</b> (donor_clause, safeguarding_clause, anticorruption_clause, confidentiality_clause, personal_data_clause, payment_clause) автоматично підставляє всі активні положення відповідної категорії, що застосовні до проєкту, типу договору й типу контрагента на дату договору. Можна також зіставити тег з конкретним положенням за кодом.</p>
+    <div class="b" style="margin:12px 0 6px">Поради</div>
+    <ul class="small" style="margin:0;padding-left:18px;color:var(--muted);line-height:1.6">
+      <li>Поле, що стоїть окремим абзацом ({{subject}}, {{contractor_details}}, положення), розгортається в кілька абзаців з тим самим форматуванням; якщо даних немає — абзац зникає.</li>
+      <li>Форматуйте тег цілком: значення отримає шрифт і накреслення першого символу тегу.</li>
+      <li>Умовні теги {{#…}} і {{/…}} ставте окремими абзацами — тоді зайвих порожніх рядків не буде.</li>
+      <li>Не використовуйте в назвах полів пробіли й кирилицю: {{contract_number}}, а не {{номер договору}}.</li>
+    </ul>
+  <//>`;
+}
+
+/* ---------------- Документ договору: генерація і версії ---------------- */
+const DOC_EDITABLE = ['draft','processing','in_approval'];
+const VER_KIND_C = {generated:'indigo', lawyer_edit:'teal', negotiation:'amber', final:'green'};
+const VER_MAX = 15*1024*1024;
+async function loadContractVersions(cid){
+  const {data,error}=await sb.from('contract_versions').select('*, template_versions(version_no, template_id, templates(name, doc_type_id))').eq('contract_id',cid).order('version_no',{ascending:false});
+  if(error) throw error; return data||[];
+}
+function verFileName(c, v, d){
+  const tv=v.template_versions, dt=tv&&tv.templates&&d.docTypes.find(x=>x.id===tv.templates.doc_type_id);
+  return versionFileName(c, v, {final:v.id===c.final_version_id, docShort:dt?dt.short:'Договір', cpLatin:c.cp_name_latin, cpName:c.cp_name, projectCode:c.project_code});
+}
+const verMime = v => v.mime || (fileExt(v.file_name)==='pdf'?'application/pdf':DOCX_MIME);
+async function downloadVersion(c, v, d){
+  try{ const b=await loadStorageBytes('contracts', v.file_path); downloadBlob(new Blob([b],{type:verMime(v)}), verFileName(c,v,d)); }
+  catch(e){ pushToast('Файл: '+errText(e),'err'); }
+}
+const verSource = v => v.template_versions ? 'Шаблон «'+((v.template_versions.templates||{}).name||'—')+'» v'+v.template_versions.version_no : v.kind==='generated' ? 'Шаблон' : 'Завантажено вручну';
+
+function PdfView({bytes, height}){
+  const [url,setUrl]=useState('');
+  useEffect(()=>{ if(!bytes) return; const u=URL.createObjectURL(new Blob([bytes],{type:'application/pdf'})); setUrl(u); return ()=>URL.revokeObjectURL(u); },[bytes]);
+  return url ? html`<iframe src=${url} style=${'width:100%;border:0;border-radius:10px;height:'+(height||'70vh')} title="PDF"></iframe>` : html`<${Loading}/>`;
+}
+function VersionPreview({v, height}){
+  const [b,setB]=useState(null); const [err,setErr]=useState('');
+  useEffect(()=>{ let dead=false; setB(null); setErr(''); loadStorageBytes('contracts', v.file_path).then(x=>{ if(!dead) setB(x); }).catch(e=>{ if(!dead) setErr(errText(e)); }); return ()=>{ dead=true; }; },[v.id]);
+  if(err) return html`<div class="note red">Файл: ${err}</div>`;
+  const ext=fileExt(v.file_name);
+  if(ext==='pdf') return html`<${PdfView} bytes=${b} height=${height}/>`;
+  if(ext!=='docx') return html`<p class="small">Перегляд доступний для DOCX і PDF. Завантажте файл, щоб відкрити його.</p>`;
+  return html`<${DocxView} bytes=${b} height=${height||'70vh'} empty="Завантаження…"/>`;
+}
+
+function ContractDocument({c, files, reloadFiles, reload, gen}){
+  const {role, d} = useCtx(); const legal=can(role,'legal');
+  const [vs,setVs]=useState(null); const [dlg,setDlg]=useState(gen&&legal&&DOC_EDITABLE.includes(c.status)?'gen':null);
+  const load=async()=>{ try{ setVs(await loadContractVersions(c.id)); } catch(e){ toastErr(e); setVs([]); } };
+  useEffect(()=>{ load(); },[c.id]);
+  const cur=vs&&vs[0], fin=vs&&vs.find(v=>v.id===c.final_version_id), editable=legal&&DOC_EDITABLE.includes(c.status);
+  const close=()=>{ setDlg(null); if(gen) setQuery({gen:''}); };
+  const done=()=>{ close(); load(); reload(); };
+  return html`<div class="grid-main">
+    <div class="card pad">
+      <div class="ctitle"><h3 style="margin:0">${cur?'Поточна версія: v'+cur.version_no:'Документ'}</h3>
+        ${cur&&html`<div style="display:flex;gap:6px;align-items:center"><${Chip} c=${VER_KIND_C[cur.kind]}>${VER_KIND[cur.kind]}<//>${cur.id===c.final_version_id&&html`<${Chip} c="green">фінальна<//>`}
+          <button class="btn sm" onClick=${()=>downloadVersion(c,cur,d)}>⬇ Завантажити</button></div>`}</div>
+      ${vs===null?html`<${Loading}/>`:!cur?html`<${Empty} title="Документа ще немає">${editable?'Сформуйте його з активного шаблону або завантажте готовий файл (DOCX, PDF).':'Юрист ще не додав документ.'}<//>`:html`
+        <div class="small muted" style="margin-bottom:10px">${verFileName(c,cur,d)} · ${verSource(cur)} · ${userLabel(d.usersBy[cur.created_by])||'—'}, ${fmtDT(cur.created_at)}${cur.comment?' · «'+cur.comment+'»':''}</div>
+        ${cur.missing_fields&&cur.missing_fields.length>0&&html`<div class="note amber small" style="margin-bottom:10px">Під час формування не було даних для: ${cur.missing_fields.map(x=>tagLabel(x, {})).join(', ')}</div>`}
+        <${VersionPreview} key=${cur.id} v=${cur} height="68vh"/>`}
+    </div>
+    <div class="stack">
+      <div class="card pad"><h3>Дії</h3>
+        ${!DOC_EDITABLE.includes(c.status)?html`<div class="note gray small" style="margin-bottom:10px">Документ заблоковано після «Погоджено»${fin?' (фінальна — v'+fin.version_no+')':''}. Щоб змінити текст, поверніть статус «На опрацюванні» з причиною і додайте нову версію.</div>`:''}
+        ${editable?html`<div style="display:flex;flex-direction:column;gap:8px">
+          <button class="btn primary" style="justify-content:center" onClick=${()=>setDlg('gen')}>Сформувати з шаблону</button>
+          <button class="btn" style="justify-content:center" onClick=${()=>setDlg('up')}>Завантажити нову версію</button></div>
+          <p class="small" style="margin-top:10px">Скачайте DOCX, відредагуйте у Word і завантажте назад — версії не перезаписуються.</p>`
+          : DOC_EDITABLE.includes(c.status)?html`<p class="small">Документ формує юридичний офіс.</p>`:''}
+      </div>
+      <div class="card pad"><div class="ctitle"><h3 style="margin:0">Версії</h3>${vs&&vs.length>0&&html`<a href="javascript:void 0" class="small" onClick=${()=>setQuery({tab:'versions'})}>Усі ${vs.length} →</a>`}</div>
+        ${vs===null?html`<p>…</p>`:vs.length===0?html`<p class="small">Ще немає.</p>`:vs.slice(0,5).map(v=>html`<div key=${v.id} class="list-row" style="padding:9px 0" onClick=${()=>downloadVersion(c,v,d)} title="Завантажити">
+          <b class="lr-t">v${v.version_no}</b><span class="small" style="flex:1">${VER_KIND[v.kind]}${v.id===c.final_version_id?' · фінальна':''}</span><span class="small muted nw">${fmtTs(v.created_at)}</span></div>`)}</div>
+      <div class="card pad"><${FilesPanel} contractId=${c.id} files=${files} reload=${reloadFiles} editable=${legal} title="Інші файли (додатки, скани)"/></div>
+    </div>
+    ${dlg==='gen'&&html`<${GenerateModal} c=${c} onClose=${close} onDone=${done}/>`}
+    ${dlg==='up'&&html`<${UploadVersionModal} c=${c} onClose=${close} onDone=${done}/>`}
+  </div>`;
+}
+
+async function saveContractVersion(c, {blob, fileName, kind, tv, comment, missing}){
+  const path=`${c.id}/${Date.now()}_${kind}_${safeName(fileName)}`;
+  const {error:ue}=await sb.storage.from('contracts').upload(path, blob, {contentType:blob.type||undefined, upsert:false}); if(ue) throw ue;
+  const {data, error}=await sb.rpc('add_contract_version',{p_contract:c.id, p_kind:kind, p_file_path:path, p_file_name:fileName, p_size:blob.size, p_mime:blob.type||null,
+    p_template_version:tv||null, p_comment:(comment||'').trim()||null, p_missing:missing&&missing.length?missing:null});
+  if(error){ await sb.storage.from('contracts').remove([path]); throw error; }
+  return data;
+}
+
+function GenerateModal({c, onClose, onDone}){
+  const {d} = useCtx();
+  const [tpls,setTpls]=useState(null); const [ctx,setCtx]=useState(null); const [all,setAll]=useState(false); const [tid,setTid]=useState('');
+  const [res,setRes]=useState(null); const [busy,setBusy]=useState(false); const [err,setErr]=useState([]); const [comment,setComment]=useState('');
+  useEffect(()=>{ (async()=>{ try{
+    const [tr, cx] = await Promise.all([sb.from('templates').select('*, template_versions!inner(*)').eq('archived',false).eq('template_versions.status','active').order('name'), loadDocData(c, d)]);
+    if(tr.error) throw tr.error;
+    setCtx(cx); setTpls(tr.data||[]);
+    const fitsL=(tr.data||[]).filter(t=>tplFits(t,c,cx.kind));
+    const pre=(tr.data||[]).find(t=>t.id===c.template_id) || (fitsL.length===1?fitsL[0]:null);
+    if(pre){ setTid(pre.id); if(!tplFits(pre,c,cx.kind)) setAll(true); }
+  } catch(e){ toastErr(e); setTpls([]); } })(); },[]);
+  useEffect(()=>{ if(!tid||!ctx||!tpls) return; let dead=false; setRes(null); setErr([]); setBusy(true);
+    (async()=>{ try{ const t=tpls.find(x=>x.id===tid), tv=t.template_versions[0]; const lib=await loadDocgen(); const b=await loadTemplateFile(tv.file_path);
+      const r=renderDocx(lib, b, tv.mapping, ctx); if(!dead) setRes({...r, tv, t}); }
+      catch(e){ if(!dead) setErr(e&&e.properties?docxErrors(e):[errText(e)]); }
+      if(!dead) setBusy(false); })();
+    return ()=>{ dead=true; }; },[tid, ctx]);
+  const save=async()=>{ if(!res) return; setBusy(true);
+    try{ const blob=new Blob([res.out],{type:DOCX_MIME});
+      await saveContractVersion(c, {blob, fileName:cleanFile((c.number||'Без номера')+' — '+res.t.name)+'.docx', kind:'generated', tv:res.tv.id, comment, missing:res.missing});
+      if(c.template_id!==res.t.id){ const {error}=await sb.from('contracts').update({template_id:res.t.id}).eq('id',c.id); if(error) toastErr(error); }
+      pushToast('Документ сформовано і збережено новою версією','ok'); onDone();
+    } catch(e){ toastErr(e); setBusy(false); } };
+  const list=(tpls||[]).filter(t=>all||tplFits(t,c,ctx&&ctx.kind));
+  const opts=list.map(t=>({v:t.id, l:t.name+' • v'+t.template_versions[0].version_no, sub:[(d.typesBy[t.contract_type_id]||{}).name, t.project_id?(d.projectsBy[t.project_id]||{}).short_code:'будь-який проєкт', CP_KINDS[t.cp_kind]].filter(Boolean).join(' • ')}));
+  return html`<${Modal} xwide=${true} title="Сформувати документ з шаблону" sub=${(c.number||'')+' • '+(c.cp_name||'')} onClose=${busy?null:onClose}
+    foot=${html`${res&&html`<button class="btn" style="margin-right:auto" onClick=${()=>downloadBlob(new Blob([res.out],{type:DOCX_MIME}), cleanFile((c.number||'Документ')+' — перегляд')+'.docx')}>Завантажити без збереження</button>`}
+      <button class="btn" onClick=${onClose} disabled=${busy}>Скасувати</button><button class="btn primary" onClick=${save} disabled=${busy||!res}>${busy&&res?html`<${Spinner}/>`:'Зберегти як нову версію'}</button>`}>
+    ${tpls===null?html`<${Loading} text="Готую дані договору…"/>`:html`
+      <div class="row2" style="align-items:end">
+        <${Field} label="Шаблон (активна версія)" hint=${all?'Показано всі активні шаблони':'Показано шаблони, що підходять за проєктом, типом договору й типом контрагента'}>
+          <${SearchSelect} value=${tid} options=${opts} onChange=${setTid} allowClear=${false} placeholder=${opts.length?'— оберіть шаблон —':'немає відповідних шаблонів'}/><//>
+        <div class="fld"><${Check} checked=${all} onChange=${setAll}>Показати всі активні шаблони<//></div>
+      </div>
+      ${tpls.length===0&&html`<div class="note amber">Активних шаблонів ще немає. Завантажте DOCX у розділі «Шаблони», пройдіть тест і опублікуйте — або завантажте готовий документ кнопкою «Завантажити нову версію».</div>`}
+      ${err.length>0&&html`<div class="note red" style="margin-bottom:12px"><b>Документ не сформовано:</b><ul style="margin:6px 0 0;padding-left:18px">${err.map(e=>html`<li>${e}</li>`)}</ul></div>`}
+      ${busy&&!res&&tid&&html`<${Loading} text="Формую документ…"/>`}
+      ${res&&html`<${MissingNote} missing=${res.missing} mapping=${res.tv.mapping}/>
+        <${Field} label="Коментар до версії"><input value=${comment} placeholder="Необов’язково" onInput=${e=>setComment(e.target.value)}/><//>
+        <${DocxView} bytes=${res.out} height="56vh"/>`}`}
+  <//>`;
+}
+const tplFits = (t, c, kind) => (!t.project_id || t.project_id===c.project_id) && (!t.contract_type_id || t.contract_type_id===c.type_id) && (!kind || t.cp_kind==='any' || t.cp_kind===kind);
+
+function UploadVersionModal({c, onClose, onDone}){
+  const [f,setF]=useState(null); const [kind,setKind]=useState('lawyer_edit'); const [comment,setComment]=useState(''); const [busy,setBusy]=useState(false); const [warn,setWarn]=useState('');
+  const onFile=async e=>{ const x=e.target.files[0]; e.target.value=''; if(!x) return; setWarn('');
+    if(!/\.(docx|pdf)$/i.test(x.name)) return pushToast('Потрібен DOCX або PDF','err');
+    if(x.size>VER_MAX) return pushToast('Файл більший за 15 МБ (ліміт Вчасно)','err');
+    setF(x);
+    if(/\.docx$/i.test(x.name)){ try{ const lib=await loadDocgen(); const z=new lib.PizZip(await x.arrayBuffer()); const txt=docParts(z).map(p=>paraText(z.file(p).asText())).join(' ');
+      if(/\{\{[^{}]+\}\}/.test(txt)) setWarn('У файлі лишилися незаповнені поля {{…}} — перевірте текст перед збереженням.'); } catch(err){ setWarn('Файл не схожий на коректний DOCX — перевірте, що він відкривається у Word.'); } } };
+  const save=async()=>{ if(!f) return pushToast('Оберіть файл','err'); setBusy(true);
+    try{ const blob=f.type?f:new Blob([f],{type:/\.pdf$/i.test(f.name)?'application/pdf':DOCX_MIME});
+      await saveContractVersion(c, {blob, fileName:f.name, kind, comment}); pushToast('Нову версію додано','ok'); onDone(); }
+    catch(e){ toastErr(e); setBusy(false); } };
+  return html`<${Modal} title="Нова версія документа" sub=${c.number||''} onClose=${busy?null:onClose}
+    foot=${html`<button class="btn" onClick=${onClose} disabled=${busy}>Скасувати</button><button class="btn primary" onClick=${save} disabled=${busy||!f}>${busy?html`<${Spinner}/>`:'Додати версію'}</button>`}>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px">
+      <label class="btn">${f?'Інший файл':'Обрати файл'}<input type="file" accept=".docx,.pdf" style="display:none" onChange=${onFile}/></label>
+      ${f?html`<span>📄 ${f.name} <span class="muted">${fmtSize(f.size)}</span></span>`:html`<span class="small muted">DOCX або PDF, до 15 МБ</span>`}</div>
+    ${warn&&html`<div class="note amber" style="margin-bottom:12px">${warn}</div>`}
+    <${Field} label="Тип версії">${[['lawyer_edit','Правка юриста','після редагування у Word'],['negotiation','Погоджувальна','з правками контрагента / після погодження у Worksection'],['final','Фінальна','текст, що йде на підпис']].map(([k,l,s])=>html`
+      <div key=${k} class=${'radio-card'+(kind===k?' on':'')} onClick=${()=>setKind(k)}><input type="radio" checked=${kind===k} style="width:auto"/><span style="flex:1"><b>${l}</b> <span class="small muted">— ${s}</span></span></div>`)}<//>
+    <${Field} label="Коментар" hint="Що змінено — потрапить в історію версій"><textarea rows="2" value=${comment} onInput=${e=>setComment(e.target.value)}></textarea><//>
+  <//>`;
+}
+
+function ContractVersions({c}){
+  const {d} = useCtx();
+  const [vs,setVs]=useState(null); const [open,setOpen]=useState(null);
+  useEffect(()=>{ loadContractVersions(c.id).then(setVs).catch(e=>{ toastErr(e); setVs([]); }); },[c.id]);
+  if(vs===null) return html`<${Loading}/>`;
+  return html`<div class="card">
+    ${!DOC_EDITABLE.includes(c.status)&&html`<div class="note gray" style="margin:14px 14px 0">Після «Погоджено» документ заблоковано: нові версії не додаються, доки статус не повернуть на «На опрацюванні» з причиною.</div>`}
+    ${vs.length===0?html`<${Empty} title="Версій ще немає">Документ формують на вкладці «Документ».<//>`:html`<div class="tbl-wrap"><table>
+      <thead><tr><th>Версія</th><th>Тип</th><th>Файл</th><th>Джерело</th><th>Автор, дата</th><th>Коментар</th><th></th></tr></thead>
+      <tbody>${vs.map(v=>html`<tr key=${v.id}>
+        <td class="nw"><b>v${v.version_no}</b>${v.id===c.final_version_id&&html` <${Chip} c="green">фінальна<//>`}</td>
+        <td><${Chip} c=${VER_KIND_C[v.kind]}>${VER_KIND[v.kind]}<//></td>
+        <td class="ell" style="max-width:260px" title=${v.file_name}>${verFileName(c,v,d)}<div class="small muted">${fmtSize(v.size)}</div></td>
+        <td class="small">${verSource(v)}${v.missing_fields&&v.missing_fields.length?html`<div style="color:var(--amber-t)">без даних: ${v.missing_fields.length}</div>`:''}</td>
+        <td class="small nw">${userLabel(d.usersBy[v.created_by])||'—'}<div class="muted">${fmtDT(v.created_at)}</div></td>
+        <td class="small">${v.comment||html`<span class="muted">—</span>`}</td>
+        <td class="nw" style="text-align:right">${['docx','pdf'].includes(fileExt(v.file_name))&&html`<button class="btn ghost sm" title="Переглянути" onClick=${()=>setOpen(v)}>👁</button>`}<button class="btn ghost sm" title="Завантажити" onClick=${()=>downloadVersion(c,v,d)}>⬇</button></td></tr>`)}</tbody></table></div>`}
+    ${open&&html`<${Modal} xwide=${true} title=${'Версія v'+open.version_no+' • '+VER_KIND[open.kind]} sub=${verFileName(c,open,d)} onClose=${()=>setOpen(null)}
+      foot=${html`<button class="btn" onClick=${()=>downloadVersion(c,open,d)}>Завантажити</button><button class="btn primary" onClick=${()=>setOpen(null)}>Закрити</button>`}><${VersionPreview} v=${open} height="64vh"/><//>`}
+  </div>`;
+}
+
+/* ---- шаблони й предмети для форм договору ---- */
+function useLibLists(){
+  const [tp,setTp]=useState(null); const [sj,setSj]=useState(null);
+  useEffect(()=>{
+    sb.from('templates').select('id,name,project_id,contract_type_id,cp_kind,template_versions!inner(id,version_no)').eq('archived',false).eq('template_versions.status','active').order('name')
+      .then(({data,error})=>{ if(error) toastErr(error); setTp(data||[]); });
+    sb.from('subjects').select('id,code,name,role_title,cp_kind,project_id,body,version_no').eq('status','active').order('name')
+      .then(({data,error})=>{ if(error) toastErr(error); setSj(data||[]); });
+  },[]);
+  return {tp:tp||[], sj:sj||[]};
+}
+function tplOptions(tp, r, kind, d, cur){
+  const o=tp.map(t=>{ const fit=tplFits(t, {project_id:r.project_id, type_id:r.type_id}, kind);
+    return {v:t.id, l:t.name+' • v'+t.template_versions[0].version_no, fit,
+      sub:(fit?'':'не збігається за параметрами · ')+[(d.typesBy[t.contract_type_id]||{}).name, t.project_id?(d.projectsBy[t.project_id]||{}).short_code:'будь-який проєкт', CP_KINDS[t.cp_kind]].filter(Boolean).join(' • ')}; })
+    .sort((a,b)=>(b.fit-a.fit)||a.l.localeCompare(b.l,'uk'));
+  if(cur && cur.v && !o.some(x=>x.v===cur.v)) o.unshift({v:cur.v, l:cur.l+' (немає активної версії)'});
+  return o;
+}
+function SubjectPick({r, setR, sj, kind, cur}){
+  const {d} = useCtx();
+  const opts=sj.map(s=>{ const fit=(!s.project_id||!r.project_id||s.project_id===r.project_id)&&(s.cp_kind==='any'||!kind||s.cp_kind===kind);
+    return {v:s.id, l:s.name, fit, sub:[s.code+' v'+s.version_no, s.role_title, s.project_id?(d.projectsBy[s.project_id]||{}).short_code:'', s.cp_kind!=='any'?CP_KINDS[s.cp_kind]:''].filter(Boolean).join(' • ')}; })
+    .sort((a,b)=>(b.fit-a.fit)||a.l.localeCompare(b.l,'uk'));
+  if(cur && cur.id && !opts.some(o=>o.v===cur.id)) opts.unshift({v:cur.id, l:(cur.name||'—')+' (попередня редакція)', sub:cur.code||''});
+  const pick=id=>{ const s=sj.find(x=>x.id===id), prev=sj.find(x=>x.id===r.subject_ref_id), n={subject_ref_id:id||''};
+    if(s){ const free=!(r.subject||'').trim() || (prev&&r.subject===prev.body) || r.subject===s.body;
+      if(free || confirm('Замінити повний текст предмета текстом з бібліотеки?')) n.subject=s.body;
+      if(!(r.title||'').trim() || (prev&&r.title===prev.name)) n.title=s.name; }
+    setR(p=>({...p, ...n})); };
+  return html`<${SearchSelect} value=${r.subject_ref_id||''} options=${opts} onChange=${pick} placeholder="— індивідуальний текст —"/>`;
+}
+function DocCard({c, files, onTab}){
+  const [v,setV]=useState(undefined);
+  useEffect(()=>{ sb.from('contract_versions').select('id,version_no,kind,created_at').eq('contract_id',c.id).order('version_no',{ascending:false}).limit(1)
+    .then(({data,error})=>{ if(error) toastErr(error); setV((data||[])[0]||null); }); },[c.id]);
+  return html`<div class="card pad"><h3>Документ</h3>
+    ${v===undefined?html`<p>…</p>`:v?html`<div><b>v${v.version_no}</b> · ${VER_KIND[v.kind]}${v.id===c.final_version_id?html` <${Chip} c="green">фінальна<//>`:''}</div><p class="small" style="margin-top:4px">${fmtDT(v.created_at)}</p>`:html`<p>Документ ще не сформовано.</p>`}
+    ${files&&files.length>0&&html`<p class="small" style="margin-top:8px">Інших файлів: ${files.length}</p>`}
+    <a href="javascript:void 0" style="display:inline-block;margin-top:10px;font-weight:600" onClick=${()=>onTab('document')}>${v?'Відкрити документ':'Сформувати або завантажити'} →</a></div>`;
 }
 
 /* ---------------- Контрагенти ---------------- */
@@ -1213,6 +2235,7 @@ function CounterpartyPage({id, tab}){
       <div class="k">IBAN</div><div class="v">${c.iban||'—'}${c.iban&&!checkIban(c.iban)?html`<div class="small" style="color:var(--amber-t)">Контрольна сума IBAN не збігається</div>`:''}</div>
       <div class="k">Банк</div><div class="v">${c.bank_name||'—'}</div>
       ${(form&&form.person||c.fop_registration)&&html`<div class="k">Реєстрація ФОП</div><div class="v">${c.fop_registration||'—'}</div>`}
+      ${(!(form&&form.person)||c.signatory_name)&&html`<div class="k">Підписант</div><div class="v">${[c.signatory_position,c.signatory_name].filter(Boolean).join(' ')||'—'}${c.signatory_basis?', що діє на підставі '+c.signatory_basis:''}${c.signatory_short?html`<div class="small muted">підпис: ${c.signatory_short}</div>`:''}</div>`}
       <div class="k">Контактна особа</div><div class="v">${c.contact||'—'}</div>
       <div class="k">Примітка</div><div class="v">${c.note||'—'}</div>
     </div><p class="small" style="margin-top:16px">Хто і коли змінював реквізити — на вкладці «Історія».</p></div>`}
@@ -1255,7 +2278,8 @@ function CounterpartyForm({row, onClose, onSaved}){
     const p={name:r.name.trim(), category_id:r.category_id||null, legal_form_id:r.legal_form_id||null, tax_id:noTax?null:String(r.tax_id||'').replace(/\s/g,'')||null,
       name_latin:(r.name_latin||'').trim()||null, email:(r.email||'').trim()||null, phone:(r.phone||'').trim()||null, address:(r.address||'').trim()||null,
       iban:(r.iban||'').trim()||null, bank_name:(r.bank_name||'').trim()||null, fop_registration:isFop?((r.fop_registration||'').trim()||null):(row.fop_registration||null),
-      contact:(r.contact||'').trim()||null, note:(r.note||'').trim()||null, active:r.active!==false};
+      contact:(r.contact||'').trim()||null, note:(r.note||'').trim()||null, active:r.active!==false,
+      signatory_position:(r.signatory_position||'').trim()||null, signatory_name:(r.signatory_name||'').trim()||null, signatory_basis:(r.signatory_basis||'').trim()||null, signatory_short:(r.signatory_short||'').trim()||null};
     if(isNew && can(role,'head') && (r.idx||'').trim()) p.idx=r.idx.trim().toUpperCase();
     if(lockedCat) delete p.category_id;
     const res = isNew ? await sb.from('counterparties').insert(p).select('*').single() : await sb.from('counterparties').update(p).eq('id',row.id).select('*').single();
@@ -1294,6 +2318,15 @@ function CounterpartyForm({row, onClose, onSaved}){
       <${Field} label="Банк"><input value=${r.bank_name||''} onInput=${e=>set('bank_name',e.target.value)}/><//>
     </div>
     ${isFop&&html`<${Field} label="Реєстрація ФОП" hint="Дата і номер запису в ЄДР"><input value=${r.fop_registration||''} onInput=${e=>set('fop_registration',e.target.value)}/><//>`}
+    ${!person&&html`<div class="b small" style="margin:4px 0 8px">Підписант (для шаблонів договорів)</div>
+      <div class="row2">
+        <${Field} label="Посада — у родовому відмінку" hint="в особі директора…"><input value=${r.signatory_position||''} placeholder="директора" onInput=${e=>set('signatory_position',e.target.value)}/><//>
+        <${Field} label="ПІБ — у родовому відмінку"><input value=${r.signatory_name||''} placeholder="Іваненка Петра Олександровича" onInput=${e=>set('signatory_name',e.target.value)}/><//>
+      </div>
+      <div class="row2">
+        <${Field} label="Діє на підставі"><input value=${r.signatory_basis||''} placeholder="Статуту" onInput=${e=>set('signatory_basis',e.target.value)}/><//>
+        <${Field} label="Підпис: Ім’я ПРІЗВИЩЕ"><input value=${r.signatory_short||''} placeholder="Петро ІВАНЕНКО" onInput=${e=>set('signatory_short',e.target.value)}/><//>
+      </div>`}
     <div class="row2">
       <${Field} label="Контактна особа"><input value=${r.contact||''} onInput=${e=>set('contact',e.target.value)}/><//>
       <${Field} label="Примітка"><input value=${r.note||''} onInput=${e=>set('note',e.target.value)}/><//>
@@ -1328,7 +2361,7 @@ function Libraries({tab}){
   const items=[['projects','Проєкти'],['categories','Категорії контрагентів'],['forms','ОПФ'],['types','Типи договорів'],['docTypes','Типи документів'],['subjects','Предмети'],['clauses','Положення']];
   return html`<div class="head"><div><h1>Бібліотеки</h1><p>Довідники, якими керує юридичний офіс</p></div></div>
     <${Tabs} value=${tab} onChange=${t=>setQuery({tab:t})} items=${items}/>
-    ${DICTS[tab]?html`<${DictTab} key=${tab} def=${DICTS[tab]}/>`:html`<div class="card pad"><p>${tab==='subjects'?'Бібліотека предметів і наборів послуг (з імпортом з Excel)':'Бібліотека повторюваних положень (donor clauses, safeguarding, anti-fraud тощо)'} з’явиться на етапі 2 разом із шаблонами.</p></div>`}`;
+    ${DICTS[tab]?html`<${DictTab} key=${tab} def=${DICTS[tab]}/>`:LIB_DEF[tab]?html`<${LibTab} key=${tab} kind=${tab}/>`:''}`;
 }
 function DictTab({def}){
   const {role, reloadDicts} = useCtx();
@@ -1378,6 +2411,143 @@ function DictModal({def, row, onClose, onSaved}){
   <//>`;
 }
 
+/* ---------------- Бібліотеки текстів: предмети і положення (версії, публікація) ---------------- */
+const LIB_DEF = {
+  subjects: {t:'Предмети / набори послуг', table:'subjects', one:'предмет',
+    note:'Описи робіт і наборів послуг: керівники відділів надають опис — юридичний офіс формалізує його тут. У договір текст копіюється: для конкретного договору його можна змінити, не змінюючи бібліотеку.'},
+  clauses: {t:'Положення', table:'clauses', one:'положення',
+    note:'Повторювані блоки для шаблонів: донорські вимоги, safeguarding, антикорупція, конфіденційність, оплата. Тег {{donor_clause}} у шаблоні підставляє всі активні положення категорії, застосовні до проєкту, типу договору, типу контрагента й дати договору.'},
+};
+const codeFrom = s => translitUA(String(s||'')).toUpperCase().replace(/[^A-Z0-9]+/g,'_').replace(/^_+|_+$/g,'').slice(0,40);
+const applyText = (a, d) => { const p=[]; a=a||{};
+  if(a.projects&&a.projects.length) p.push(a.projects.map(id=>(d.projectsBy[id]||{}).short_code||(d.projectsBy[id]||{}).full_name||'?').join(', '));
+  if(a.types&&a.types.length) p.push(a.types.map(id=>(d.typesBy[id]||{}).name||'?').join(', '));
+  if(a.kinds&&a.kinds.length) p.push(a.kinds.map(k=>CP_KINDS[k]||k).join(', '));
+  return p.length ? p.join(' • ') : 'усі договори'; };
+function CheckList({options, value, onChange, disabled, height}){
+  const set=new Set(value||[]);
+  return html`<div class="checklist" style=${'max-height:'+(height||150)+'px'}>${options.length===0?html`<span class="small muted">порожньо</span>`:options.map(o=>html`<label key=${o.v} class="check" style="padding:3px 0;font-weight:400">
+    <input type="checkbox" checked=${set.has(o.v)} disabled=${disabled} onChange=${e=>{ const n=new Set(set); if(e.target.checked) n.add(o.v); else n.delete(o.v); onChange([...n]); }}/> ${o.l}</label>`)}</div>`;
+}
+function LibTab({kind}){
+  const {role, d} = useCtx(); const def=LIB_DEF[kind], legal=can(role,'legal');
+  const [rows,setRows]=useState(null); const [q,setQ]=useState(''); const [st,setSt]=useState('work'); const [cat,setCat]=useState(''); const [prj,setPrj]=useState('');
+  const [open,setOpen]=useState(null); const [imp,setImp]=useState(false);
+  const load=async()=>{ const {data,error}=await sb.from(def.table).select('*').order('code').order('version_no',{ascending:false}); if(error) toastErr(error); setRows(data||[]); return data||[]; };
+  useEffect(()=>{ load(); },[kind]);
+  const fam={}; (rows||[]).forEach(r=>{ (fam[r.code]=fam[r.code]||[]).push(r); });
+  const heads=Object.values(fam).map(vs=>{ const act=vs.find(v=>v.status==='active'), dr=vs.find(v=>v.status==='draft'); return {code:vs[0].code, head:act||dr||vs[0], act, dr, vs, st:act?'active':dr?'draft':'archived'}; });
+  const list=heads.filter(h=>(st==='work'?h.st!=='archived':st==='all'?true:h.st===st) && (!cat||h.head.category===cat) && (!prj||h.head.project_id===prj)
+    && fold([h.head.code,h.head.name,h.head.role_title,h.head.body].join(' ')).includes(fold(q.trim()))).sort((a,b)=>kind==='clauses'?((a.head.category||'').localeCompare(b.head.category||'')||(a.head.sort_order-b.head.sort_order)||a.code.localeCompare(b.code)):a.head.name.localeCompare(b.head.name,'uk'));
+  const cnt=k=>heads.filter(h=>h.st===k).length;
+  const openFam=async code=>{ const data=await load(); setOpen({code, vs:data.filter(r=>r.code===code)}); };
+  return html`
+    <div class="note" style="margin-bottom:14px">${def.note}</div>
+    <div class="toolbar" style="margin-top:0">
+      <b style="font-size:16px">${def.t}</b><span class="muted">${rows?list.length:''}</span>
+      ${[['work','Робочі',heads.length-cnt('archived')],['active','Активні',cnt('active')],['draft','Чернетки',cnt('draft')],['archived','Архівні',cnt('archived')]].map(([k,l,n])=>html`<span key=${k} class=${'fchip'+(st===k?' on':'')} onClick=${()=>setSt(k)}>${l} ${n}</span>`)}
+      <span style="flex:1"></span>
+      ${kind==='subjects'&&can(role,'head')&&html`<button class="btn sm" onClick=${()=>setImp(true)}>Імпорт з Excel</button>`}
+      ${legal&&html`<button class="btn primary sm" onClick=${()=>setOpen({code:null, vs:[]})}>+ Додати</button>`}
+    </div>
+    <div class="card" style="padding:10px 14px;margin-bottom:12px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+      <input class="inp" style="flex:1;min-width:220px" placeholder="Пошук за кодом, назвою, текстом…" value=${q} onInput=${e=>setQ(e.target.value)}/>
+      ${kind==='clauses'?html`<div style="width:240px"><${SearchSelect} value=${cat} options=${Object.entries(CLAUSE_CATS).map(([v,l])=>({v,l}))} onChange=${setCat} placeholder="Усі категорії"/></div>`
+        :html`<div style="width:240px"><${SearchSelect} value=${prj} options=${d.projects.map(p=>({v:p.id,l:projectLabel(p)}))} onChange=${setPrj} placeholder="Усі проєкти"/></div>`}
+    </div>
+    <div class="card"><div class="tbl-wrap">${rows===null?html`<${Loading}/>`:list.length===0?html`<${Empty} title=${heads.length?'Нічого не знайдено':'Порожньо'}>${!heads.length&&legal?'Натисніть «+ Додати»'+(kind==='subjects'?' або імпортуйте з Excel':'')+'.':''}<//>`:html`<table>
+      <thead><tr><th>Код</th><th>Назва</th>${kind==='clauses'?html`<th>Категорія</th><th>Застосовність</th><th>Чинність</th>`:html`<th>Тип контрагента</th><th>Проєкт</th>`}<th>Версія</th><th>Статус</th></tr></thead>
+      <tbody>${list.map(h=>{ const r=h.head; return html`<tr key=${h.code} class="click" onClick=${()=>setOpen({code:h.code, vs:h.vs})}>
+        <td class="nw"><b>${r.code}</b></td><td><div>${r.name}</div>${r.role_title&&html`<div class="small muted">${r.role_title}</div>`}</td>
+        ${kind==='clauses'?html`<td class="nw">${CLAUSE_CATS[r.category]||r.category}</td><td class="small">${applyText(r.applicability,d)}</td><td class="small nw">${r.effective_from||r.effective_to?(fmtDate(r.effective_from)||'…')+' — '+(fmtDate(r.effective_to)||'…'):'—'}</td>`
+          :html`<td class="nw">${CP_KINDS[r.cp_kind]||'—'}</td><td class="nw">${r.project_id?(d.projectsBy[r.project_id]||{}).short_code||(d.projectsBy[r.project_id]||{}).full_name:'будь-який'}</td>`}
+        <td class="nw">${h.act?'v'+h.act.version_no:'—'}${h.dr&&html` <${Chip} c="amber">чернетка v${h.dr.version_no}<//>`}</td>
+        <td><${Chip} c=${TPL_VST[h.st].c}>${h.st==='active'?'Активний':h.st==='draft'?'Чернетка':'Архівний'}<//></td></tr>`; })}</tbody></table>`}</div></div>
+    ${open&&html`<${LibModal} key=${(open.code||'new')+':'+open.vs.map(v=>v.id+v.status).join()} kind=${kind} fam=${open.vs} onClose=${()=>{ setOpen(null); load(); }} onFamily=${openFam}/>`}
+    ${imp&&html`<${ImportWizard} kind="subjects" onClose=${()=>{ setImp(false); load(); }}/>`}`;
+}
+function LibModal({kind, fam, onClose, onFamily}){
+  const {role, d} = useCtx(); const def=LIB_DEF[kind], legal=can(role,'legal'), isNew=!fam.length;
+  const [selId,setSelId]=useState(()=>{ const x=fam.find(v=>v.status==='draft')||fam.find(v=>v.status==='active')||fam[0]; return x?x.id:null; });
+  const v=fam.find(x=>x.id===selId)||null;
+  const blank = kind==='clauses' ? {code:'', name:'', category:'other', sort_order:100, effective_from:'', effective_to:'', applicability:{}, body:'', source:'', note:''}
+                                 : {code:'', name:'', role_title:'', cp_kind:'any', project_id:'', body:'', source:'', note:''};
+  const [r,setR]=useState(()=>v?{...blank, ...v, effective_from:v.effective_from||'', effective_to:v.effective_to||'', project_id:v.project_id||''}:blank);
+  const [codeTouched,setCodeTouched]=useState(!isNew); const [busy,setBusy]=useState(false); const [errs,setErrs]=useState({});
+  const editable=legal&&(isNew||(v&&v.status==='draft'));
+  const set=(k,val)=>setR(p=>{ const n={...p,[k]:val}; if(k==='name'&&!codeTouched&&isNew) n.code=codeFrom(val); return n; });
+  const setA=(k,val)=>setR(p=>({...p, applicability:{...(p.applicability||{}), [k]:val}}));
+  const validate=()=>{ const e={}; const code=(r.code||'').toUpperCase().trim();
+    if(!/^[A-Z0-9_]{2,60}$/.test(code)) e.code='Лише латиниця, цифри та _ (2–60 знаків)';
+    if(!(r.name||'').trim()) e.name='Вкажіть назву'; if(!(r.body||'').trim()) e.body='Вкажіть текст';
+    if(r.effective_from&&r.effective_to&&r.effective_to<r.effective_from) e.eff='Кінець раніше за початок';
+    return e; };
+  const payload=()=>{ const p={code:(r.code||'').toUpperCase().trim(), name:r.name.trim(), body:r.body, source:(r.source||'').trim()||null, note:(r.note||'').trim()||null};
+    if(kind==='clauses') Object.assign(p, {category:r.category||'other', sort_order:Number(r.sort_order)||100, effective_from:r.effective_from||null, effective_to:r.effective_to||null,
+      applicability:Object.fromEntries(Object.entries(r.applicability||{}).filter(([k,a])=>a&&a.length))});
+    else Object.assign(p, {role_title:(r.role_title||'').trim()||null, cp_kind:r.cp_kind||'any', project_id:r.project_id||null});
+    if(v&&v.version_no>1) delete p.code;
+    return p; };
+  const save=async(quiet)=>{ const e=validate(); setErrs(e); if(Object.keys(e).length) return null; setBusy(true);
+    const res = isNew ? await sb.from(def.table).insert(payload()).select('*').single() : await sb.from(def.table).update(payload()).eq('id',v.id).select('*').single();
+    setBusy(false); if(res.error){ toastErr(res.error); return null; }
+    if(!quiet) pushToast('Чернетку збережено','ok');
+    return res.data; };
+  const publish=async()=>{ const row=await save(true); if(!row) return; setBusy(true);
+    const {error}=await sb.rpc('library_set_status',{p_kind:kind, p_id:row.id, p_active:true}); setBusy(false);
+    if(error) return toastErr(error); pushToast('Опубліковано: '+row.code+' v'+row.version_no,'ok'); onFamily(row.code); };
+  const saveDraft=async()=>{ const row=await save(false); if(row) onFamily(row.code); };
+  const newVersion=async()=>{ setBusy(true); const {data,error}=await sb.rpc('library_new_version',{p_kind:kind, p_id:v.id}); setBusy(false);
+    if(error) return toastErr(error); pushToast('Створено чернетку нової версії','ok'); onFamily(v.code); };
+  const retire=async()=>{ if(!confirm('Зняти «'+v.name+'» з використання? У нових документах воно не підставлятиметься; уже сформовані документи не зміняться.')) return;
+    setBusy(true); const {error}=await sb.rpc('library_set_status',{p_kind:kind, p_id:v.id, p_active:false}); setBusy(false);
+    if(error) return toastErr(error); pushToast('Знято з використання','ok'); onFamily(v.code); };
+  const delDraft=async()=>{ if(!confirm('Видалити чернетку v'+v.version_no+'?')) return; setBusy(true);
+    const {error}=await sb.from(def.table).delete().eq('id',v.id); setBusy(false); if(error) return toastErr(error);
+    pushToast('Чернетку видалено','ok'); if(fam.length>1) onFamily(v.code); else onClose(); };
+  const hasDraft=fam.some(x=>x.status==='draft');
+  const title=isNew?'Нове '+(kind==='clauses'?'положення':'— предмет / набір послуг'):(v.code+' • v'+v.version_no);
+  return html`<${Modal} wide=${true} title=${title} sub=${isNew?'Створюється чернеткою; у документи потрапляє лише після публікації':(TPL_VST[v.status].l+' • '+v.name)} onClose=${busy?null:onClose}
+    foot=${html`
+      ${editable&&!isNew&&html`<button class="btn danger" style="margin-right:auto" onClick=${delDraft} disabled=${busy}>Видалити чернетку</button>`}
+      ${legal&&v&&v.status==='active'&&html`<button class="btn" style="margin-right:auto" onClick=${retire} disabled=${busy}>Зняти з використання</button>`}
+      <button class="btn" onClick=${onClose} disabled=${busy}>Закрити</button>
+      ${editable&&html`<button class="btn" onClick=${saveDraft} disabled=${busy}>Зберегти чернетку</button><button class="btn primary" onClick=${publish} disabled=${busy}>Опублікувати</button>`}
+      ${legal&&v&&v.status!=='draft'&&!hasDraft&&html`<button class="btn primary" onClick=${newVersion} disabled=${busy}>${v.status==='active'?'Нова версія':'Нова версія на основі цієї'}</button>`}`}>
+    ${fam.length>1&&html`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">${fam.slice().sort((a,b)=>a.version_no-b.version_no).map(x=>html`<span key=${x.id} class=${'fchip'+(x.id===selId?' on':'')}
+      onClick=${()=>{ setSelId(x.id); setR({...blank, ...x, effective_from:x.effective_from||'', effective_to:x.effective_to||'', project_id:x.project_id||''}); setErrs({}); }}>v${x.version_no} <span class=${'dot '+x.status}></span></span>`)}</div>`}
+    ${!editable&&v&&html`<div class=${'note'+(v.status==='archived'?' gray':'')} style="margin-bottom:14px">${v.status==='active'?'Опублікована версія не змінюється. Щоб змінити текст — «Нова версія».':'Архівна версія — лише для перегляду.'}${v.activated_at?' Опубліковано '+fmtDT(v.activated_at)+'.':''}</div>`}
+    <div class="row2">
+      <${Field} label="Код" req error=${errs.code} hint=${v&&v.version_no>1?'Не змінюється між версіями':'Латиницею, напр. DONOR_UNICEF; у шаблоні можна зіставити тег з кодом'}><input value=${r.code} disabled=${!editable||(v&&v.version_no>1)} onInput=${e=>{ setCodeTouched(true); set('code', e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g,'_')); }}/><//>
+      <${Field} label="Назва" req error=${errs.name}><input value=${r.name} disabled=${!editable} onInput=${e=>set('name',e.target.value)}/><//>
+    </div>
+    ${kind==='clauses'?html`
+      <div class="row3">
+        <${Field} label="Категорія"><select value=${r.category} disabled=${!editable} onChange=${e=>set('category',e.target.value)}>${Object.entries(CLAUSE_CATS).map(([k,l])=>html`<option value=${k}>${l}</option>`)}</select><//>
+        <${Field} label="Чинне з" error=${errs.eff}><input type="date" value=${r.effective_from} disabled=${!editable} onInput=${e=>set('effective_from',e.target.value)}/><//>
+        <${Field} label="Чинне до"><input type="date" value=${r.effective_to} disabled=${!editable} onInput=${e=>set('effective_to',e.target.value)}/><//>
+      </div>
+      <div class="b small" style="margin:2px 0 6px">Застосовність <span class="muted" style="font-weight:400">— нічого не обрано = для всіх</span></div>
+      <div class="row3">
+        <${Field} label="Проєкти"><${CheckList} disabled=${!editable} options=${d.projects.filter(p=>p.active||(r.applicability.projects||[]).includes(p.id)).map(p=>({v:p.id,l:p.short_code||p.full_name}))} value=${(r.applicability||{}).projects} onChange=${x=>setA('projects',x)}/><//>
+        <${Field} label="Типи договорів"><${CheckList} disabled=${!editable} options=${d.types.filter(t=>t.active||(r.applicability.types||[]).includes(t.id)).map(t=>({v:t.id,l:t.name}))} value=${(r.applicability||{}).types} onChange=${x=>setA('types',x)}/><//>
+        <${Field} label="Тип контрагента"><${CheckList} disabled=${!editable} options=${[{v:'fop',l:'ФОП'},{v:'person',l:'Фізична особа (ЦПХ)'},{v:'company',l:'Юридична особа'}]} value=${(r.applicability||{}).kinds} onChange=${x=>setA('kinds',x)}/><//>
+      </div>
+      <${Field} label="Порядок" hint="Менше число — вище в документі, якщо в категорії кілька положень" style="max-width:220px"><input type="number" value=${r.sort_order} disabled=${!editable} onInput=${e=>set('sort_order',e.target.value)}/><//>`
+    :html`
+      <div class="row3">
+        <${Field} label="Роль / посада"><input value=${r.role_title||''} disabled=${!editable} placeholder="тьютор, вихователь…" onInput=${e=>set('role_title',e.target.value)}/><//>
+        <${Field} label="Тип контрагента"><select value=${r.cp_kind} disabled=${!editable} onChange=${e=>set('cp_kind',e.target.value)}>${Object.entries(CP_KINDS).map(([k,l])=>html`<option value=${k}>${l}</option>`)}</select><//>
+        <${Field} label="Проєкт"><${SearchSelect} value=${r.project_id} disabled=${!editable} options=${d.projects.map(p=>({v:p.id,l:projectLabel(p)}))} onChange=${x=>set('project_id',x)} placeholder="будь-який"/><//>
+      </div>`}
+    <${Field} label="Текст" req error=${errs.body} hint="Кожен рядок стане окремим абзацом документа"><textarea rows="9" value=${r.body} disabled=${!editable} onInput=${e=>set('body',e.target.value)}></textarea><//>
+    <div class="row2">
+      <${Field} label="Джерело" hint=${kind==='subjects'?'Напр.: опис від керівника відділу, лист від…':'Напр.: вимоги донора, політика Фонду'}><input value=${r.source||''} disabled=${!editable} onInput=${e=>set('source',e.target.value)}/><//>
+      <${Field} label="Примітка"><input value=${r.note||''} disabled=${!editable} onInput=${e=>set('note',e.target.value)}/><//>
+    </div>
+  <//>`;
+}
+
 /* ---------------- Імпорт з Excel: Preview → Commit ---------------- */
 const IMPORT_DEF = {
   counterparties: {title:'Імпорт контрагентів', rpc:'import_counterparties', fields:[
@@ -1404,7 +2574,17 @@ const IMPORT_DEF = {
     {k:'end_date', l:'Завершення', syn:['завершення','кінець','дата завершення','end'], ex:'31.12.2026'},
     {k:'note', l:'Примітка', syn:['примітка','коментар','note'], ex:''},
   ]},
+  subjects: {title:'Імпорт предметів', rpc:'import_subjects', fields:[
+    {k:'code', l:'Код', req:true, syn:['код','code','код предмета','ідентифікатор'], ex:'TUTOR_SBC'},
+    {k:'name', l:'Назва', req:true, syn:['назва','найменування','предмет','name','назва предмета'], ex:'Послуги тьютора SBC'},
+    {k:'role_title', l:'Роль / посада', syn:['роль','посада','роль посада','role'], ex:'тьютор'},
+    {k:'cp_kind', l:'Тип контрагента', syn:['тип контрагента','контрагент','тип','kind'], ex:'ФОП'},
+    {k:'project', l:'Код проєкту', syn:['проєкт','проект','код проєкту','project'], ex:'UNICEF#3'},
+    {k:'body', l:'Повний текст', req:true, syn:['текст','повний текст','опис','опис робіт','предмет договору','body'], ex:'Виконавець зобов’язується надати послуги тьютора…'},
+    {k:'source', l:'Джерело', syn:['джерело','від кого','source'], ex:'опис від керівника відділу'},
+  ]},
 };
+const KIND_WORDS = [[/^(фоп|фізична особа.?підприємець|fop)$/,'fop'],[/^(фо|фізична особа|цпх|фіз.?особа|person)$/,'person'],[/^(юо|юр.?особа|юридична особа|тов|організація|company)$/,'company'],[/^(будь.?який|усі|всі|any|)$/,'any']];
 const normH = s => fold(String(s||'')).replace(/[^\p{L}\p{N}#]+/gu,' ').trim();
 function autoMap(headers, fields){
   const map={}, used=new Set(), H=headers.map(normH);
@@ -1449,6 +2629,7 @@ function ImportWizard({kind, onClose}){
     const out = body.map(({row,cells})=>{ const data={}; def.fields.forEach(f=>{ if(map[f.k]!=null) data[f.k]=cellStr(cells[map[f.k]], f.k); }); return {row, data, errs:[], warns:[], status:'new'}; });
     try{
       if(kind==='counterparties') await validateCounterpartyRows(out, d);
+      else if(kind==='subjects') await validateSubjectRows(out, d);
       else await validateProjectRows(out, d);
     } catch(err){ setBusy(false); setProgress(''); return toastErr(err); }
     setRows(out); setBusy(false); setProgress(''); setStep(3);
@@ -1463,7 +2644,7 @@ function ImportWizard({kind, onClose}){
     for(let i=0;i<send.length;i+=500){
       setProgress('Імпортую '+Math.min(i+500,send.length)+' з '+send.length+'…');
       const chunk=send.slice(i,i+500).map(r=>({row:r.row, ...r.data}));
-      const {data:rep, error:e2} = await sb.rpc(def.rpc, {p_batch:batch, p_rows:chunk, p_fill_blanks:fill});
+      const {data:rep, error:e2} = await sb.rpc(def.rpc, kind==='subjects' ? {p_batch:batch, p_rows:chunk, p_activate:fill} : {p_batch:batch, p_rows:chunk, p_fill_blanks:fill});
       if(e2){ failed=errText(e2); break; }
       report.push(...rep);
     }
@@ -1473,10 +2654,10 @@ function ImportWizard({kind, onClose}){
   };
   const cnt = s => (rows||[]).filter(r=>r.status===s).length;
   const shown = (rows||[]).filter(r=>!onlyBad || r.status==='error' || r.warns.length).slice(0,500);
-  const stChip = r => r.status==='error'?html`<${Chip} c="red">Помилка<//>`: r.status==='exists'?html`<${Chip} c="amber">${fill?'Доповнити':'Уже є — пропустити'}<//>`: html`<${Chip} c="green">Буде створено<//>`;
+  const stChip = r => r.status==='error'?html`<${Chip} c="red">Помилка<//>`: r.status==='exists'?html`<${Chip} c="amber">${fill&&kind!=='subjects'?'Доповнити':'Уже є — пропустити'}<//>`: html`<${Chip} c="green">Буде створено<//>`;
   const resCnt = s => (result?result.report:[]).filter(r=>r.status===s).length;
   const repCols = [{l:'Рядок', x:r=>r.row}, {l:'Назва', x:r=>r.name||''}, {l:'Результат', x:r=>({created:'створено',updated:'доповнено',skipped:'пропущено (уже є)',error:'помилка'})[r.status]||r.status},
-    ...(kind==='counterparties'?[{l:'Індекс', x:r=>r.idx||''}]:[]), {l:'Системний ID', x:r=>r.id||''}, {l:'Примітка', x:r=>r.message||''}];
+    ...(kind==='counterparties'?[{l:'Індекс', x:r=>r.idx||''}]:kind==='subjects'?[{l:'Код', x:r=>r.code||''}]:[]), {l:'Системний ID', x:r=>r.id||''}, {l:'Примітка', x:r=>r.message||''}];
   return html`<${Modal} xwide=${true} title=${def.title} sub=${file?file.name:'Excel (.xlsx, .xls) або CSV'} onClose=${busy?null:onClose}
     foot=${html`${progress&&html`<span class="muted" style="margin-right:auto">${progress}</span>`}
       ${step===2&&html`<button class="btn" onClick=${()=>setStep(1)}>Назад</button><button class="btn primary" onClick=${check} disabled=${busy}>Перевірити дані</button>`}
@@ -1491,6 +2672,7 @@ function ImportWizard({kind, onClose}){
         <button class="btn" onClick=${sample}>Скачати зразок</button></div>
       <div class="note gray" style="margin-top:16px">${kind==='counterparties'
         ?'Імпорт спершу лише показує результат — нічого не створюється до кнопки «Імпортувати». Наявних контрагентів шукаємо за ЄДРПОУ / РНОКПП і не перезаписуємо. Якщо в колонці «Індекс» є наявні індекси (S187, AK031), вони зберігаються, а нумерація категорії продовжиться після найбільшого.'
+        :kind==='subjects'?'Імпорт спершу лише показує результат — нічого не створюється до кнопки «Імпортувати». Код — латиницею (TUTOR_SBC); наявні коди пропускаються (нову редакцію робіть у бібліотеці). Тип контрагента: ФОП, ФО (ЦПХ), ЮО або порожньо — будь-який. Проєкт — за кодом (UNICEF#3).'
         :'Імпорт спершу лише показує результат — нічого не створюється до кнопки «Імпортувати». Наявні проєкти шукаємо за кодом (або за назвою, якщо коду немає) і не перезаписуємо.'}</div></div>`}
     ${step===2&&html`<div>
       <p style="margin-bottom:12px">Рядок із назвами колонок: ${hdrRow+1}. Даних: ${Math.max(0,aoa.length-hdrRow-1)} ${plural(Math.max(0,aoa.length-hdrRow-1),'рядок','рядки','рядків')}. Перевірте зіставлення:</p>
@@ -1503,17 +2685,17 @@ function ImportWizard({kind, onClose}){
         <${Chip}>З попередженнями: ${rows.filter(r=>r.warns.length).length}<//><span style="flex:1"></span>
         <${Check} checked=${onlyBad} onChange=${setOnlyBad}>Лише проблемні<//>
       </div>
-      <div style="margin-bottom:12px"><${Check} checked=${fill} onChange=${setFill}>Доповнювати порожні поля в наявних записах (заповнені поля не змінюються)<//></div>
+      <div style="margin-bottom:12px"><${Check} checked=${fill} onChange=${setFill}>${kind==='subjects'?'Одразу опублікувати (статус «Активний»); інакше — чернетки для перевірки':'Доповнювати порожні поля в наявних записах (заповнені поля не змінюються)'}<//></div>
       <div class="card" style="max-height:48vh;overflow:auto"><table>
-        <thead><tr><th>Рядок</th><th>${kind==='counterparties'?'Назва / ПІБ':'Назва'}</th><th>${kind==='counterparties'?'Код':'Код проєкту'}</th>${kind==='counterparties'&&html`<th>Індекс / категорія</th>`}<th>Результат</th><th>Примітка</th></tr></thead>
+        <thead><tr><th>Рядок</th><th>${kind==='counterparties'?'Назва / ПІБ':'Назва'}</th><th>${kind==='counterparties'||kind==='subjects'?'Код':'Код проєкту'}</th>${kind==='counterparties'&&html`<th>Індекс / категорія</th>`}<th>Результат</th><th>Примітка</th></tr></thead>
         <tbody>${shown.map(r=>html`<tr key=${r.row}><td class="muted">${r.row}</td><td>${r.data.name||r.data.full_name||html`<span class="muted">—</span>`}</td>
-          <td class="nw">${kind==='counterparties'?(r.data.tax_id||'—'):(r.data.short_code||'—')}</td>
+          <td class="nw">${kind==='counterparties'?(r.data.tax_id||'—'):kind==='subjects'?(r.data.code||'—'):(r.data.short_code||'—')}</td>
           ${kind==='counterparties'&&html`<td class="nw">${r.data.idx||(r.data.category?r.data.category+'…':'—')}</td>`}
           <td>${stChip(r)}</td><td class="small">${r.errs.length?html`<span style="color:var(--red-t)">${r.errs.join('; ')}</span>`:''}${r.warns.length?html`<span style="color:var(--amber-t)">${r.errs.length?' · ':''}${r.warns.join('; ')}</span>`:''}${r.existing?html`<span class="muted"> ${r.existing}</span>`:''}</td></tr>`)}</tbody></table></div>
       ${rows.length>shown.length&&html`<p class="small" style="margin-top:8px">Показано ${shown.length} з ${rows.length}. Імпортуються всі рядки без помилок.</p>`}</div>`}
     ${step===4&&result&&html`<div>
       ${result.failed&&html`<div class="note red" style="margin-bottom:12px">Імпорт зупинився: ${result.failed}. Уже імпортовані рядки можна скасувати в «Налаштування → Пакети імпорту».</div>`}
-      <div class="toolbar" style="margin-top:0"><${Chip} c="green">Створено: ${resCnt('created')}<//><${Chip} c="indigo">Доповнено: ${resCnt('updated')}<//><${Chip} c="amber">Пропущено: ${resCnt('skipped')}<//><${Chip} c="red">Помилки: ${resCnt('error')}<//></div>
+      <div class="toolbar" style="margin-top:0"><${Chip} c="green">Створено: ${resCnt('created')}<//>${kind!=='subjects'&&html`<${Chip} c="indigo">Доповнено: ${resCnt('updated')}<//>`}<${Chip} c="amber">Пропущено: ${resCnt('skipped')}<//><${Chip} c="red">Помилки: ${resCnt('error')}<//></div>
       <p>Пакет імпорту збережено. Поки створені записи ще не використані в договорах, його можна скасувати: «Налаштування → Пакети імпорту».</p></div>`}
   <//>`;
 }
@@ -1563,15 +2745,30 @@ async function validateProjectRows(out, d){
   });
 }
 
+async function validateSubjectRows(out, d){
+  const prj=Object.fromEntries(d.projects.filter(p=>p.short_code).map(p=>[p.short_code.toUpperCase(),p])); const seen={};
+  out.forEach(r=>{ const x=r.data;
+    x.code=(x.code||'').toUpperCase().trim().replace(/\s+/g,'_'); if(!/^[A-Z0-9_]{2,80}$/.test(x.code)) r.errs.push('код «'+(r.data.code||'')+'»: лише латиниця, цифри, _');
+    x.name=(x.name||'').trim(); if(!x.name) r.errs.push('порожня назва');
+    x.body=String(x.body||'').replace(/\r\n/g,'\n').trim(); if(!x.body) r.errs.push('порожній текст');
+    const kw=fold(x.cp_kind||'').trim(); const km=KIND_WORDS.find(([re])=>re.test(kw)); if(km) x.cp_kind=km[1]; else { r.errs.push('тип контрагента «'+x.cp_kind+'»: ФОП / ФО / ЮО або порожньо'); }
+    x.project=(x.project||'').trim(); if(x.project && !prj[x.project.toUpperCase()]) r.errs.push('немає проєкту з кодом '+x.project);
+    if(x.code){ if(seen[x.code]) r.errs.push('дубль коду в файлі (рядок '+seen[x.code]+')'); else seen[x.code]=r.row; }
+  });
+  const ex=new Set((await inChunks(out.map(r=>r.data.code), async ch=>{ const {data,error}=await sb.from('subjects').select('code').in('code',ch); if(error) throw error; return data; })).map(x=>x.code));
+  out.forEach(r=>{ if(ex.has(r.data.code)){ r.existing='(код уже є в бібліотеці)'; if(!r.errs.length) r.status='exists'; } if(r.errs.length) r.status='error'; });
+}
+
 /* ---------------- Налаштування ---------------- */
 function Settings({tab}){
   const {role} = useCtx();
-  const items=[['profile','Мій профіль'], can(role,'admin')&&['users','Користувачі'], can(role,'head')&&['journal','Журнал змін'],
+  const items=[['profile','Мій профіль'], can(role,'legal')&&['org','Реквізити Фонду'], can(role,'admin')&&['users','Користувачі'], can(role,'head')&&['journal','Журнал змін'],
                can(role,'head')&&['imports','Пакети імпорту'], can(role,'admin')&&['vchasno','Вчасно']].filter(Boolean);
   const t = items.some(i=>i[0]===tab) ? tab : 'profile';
   return html`<div class="head"><div><h1>Налаштування</h1><p>Профіль, користувачі, журнал змін</p></div></div>
     <${Tabs} value=${t} onChange=${x=>setQuery({tab:x})} items=${items}/>
     ${t==='profile'&&html`<${MyProfile}/>`}
+    ${t==='org'&&html`<${OrgTab}/>`}
     ${t==='users'&&html`<${UsersTab}/>`}
     ${t==='journal'&&html`<${JournalTab}/>`}
     ${t==='imports'&&html`<${ImportsTab}/>`}
@@ -1599,7 +2796,7 @@ function UsersTab(){
     <div class="card pad" style="margin-top:16px"><h3>Що може кожна роль</h3><table class="small"><tbody>
       <tr><td class="b nw">Адміністратор</td><td>Усе, зокрема користувачі й ролі, журнал, імпорт</td></tr>
       <tr><td class="b nw">Діловод / керівник юр. напряму</td><td>Усі юридичні права, технічна зміна номера з причиною, імпорт, журнал</td></tr>
-      <tr><td class="b nw">Юрист</td><td>Картки договорів, контрагенти, довідники, статуси, файли</td></tr>
+      <tr><td class="b nw">Юрист</td><td>Картки договорів, контрагенти, довідники, шаблони й бібліотеки (створення, тест, публікація), документи й версії, статуси</td></tr>
       <tr><td class="b nw">Головний бухгалтер</td><td>Повний реєстр; змінює лише суму, валюту і тип суми</td></tr>
       <tr><td class="b nw">Бухгалтер</td><td>Лише договори з масових пакетів (масове контрактування — етап 3), без юридичного редагування</td></tr>
       <tr><td class="b nw">Директорка</td><td>Лише перегляд: реєстр, картки, файли, статуси</td></tr>
@@ -1645,13 +2842,41 @@ function ImportsTab(){
   const rollback=async b=>{ if(!confirm('Скасувати пакет «'+(b.file_name||'')+'»? Створені ним записи буде видалено (якщо вони ще не використані в договорах). Доповнені поля не повертаються.')) return;
     const {data,error}=await sb.rpc('rollback_import',{p_batch:b.id}); if(error) return toastErr(error); pushToast('Пакет скасовано, видалено записів: '+(data&&data.deleted||0),'ok'); load(); reloadDicts(); };
   const report=b=>exportRows(b.report||[], [{l:'Рядок', x:r=>r.row}, {l:'Назва', x:r=>r.name||''}, {l:'Результат', x:r=>({created:'створено',updated:'доповнено',skipped:'пропущено (уже є)',error:'помилка'})[r.status]||r.status},
-    {l:'Індекс', x:r=>r.idx||''}, {l:'Системний ID', x:r=>r.id||''}, {l:'Примітка', x:r=>r.message||''}], 'Звіт імпорту '+fmtTs(b.created_at).replace(/\./g,'-'), 'xlsx');
-  return html`<div class="card">${rows===null?html`<${Loading}/>`:rows.length===0?html`<${Empty} title="Імпортів ще не було">Імпорт контрагентів — у розділі «Контрагенти», проєктів — у «Бібліотеки → Проєкти».<//>`:html`<table>
+    {l:b.kind==='subjects'?'Код':'Індекс', x:r=>r.idx||r.code||''}, {l:'Системний ID', x:r=>r.id||''}, {l:'Примітка', x:r=>r.message||''}], 'Звіт імпорту '+fmtTs(b.created_at).replace(/\./g,'-'), 'xlsx');
+  return html`<div class="card">${rows===null?html`<${Loading}/>`:rows.length===0?html`<${Empty} title="Імпортів ще не було">Імпорт контрагентів — у розділі «Контрагенти», проєктів і предметів — у «Бібліотеках».<//>`:html`<table>
     <thead><tr><th>Дата</th><th>Що</th><th>Файл</th><th>Хто</th><th>Результат</th><th></th></tr></thead>
-    <tbody>${rows.map(b=>{ const s=b.stats||{}; return html`<tr key=${b.id}><td class="nw">${fmtDT(b.created_at)}</td><td>${b.kind==='counterparties'?'Контрагенти':'Проєкти'}</td><td class="ell">${b.file_name||'—'}</td>
+    <tbody>${rows.map(b=>{ const s=b.stats||{}; return html`<tr key=${b.id}><td class="nw">${fmtDT(b.created_at)}</td><td>${({counterparties:'Контрагенти', projects:'Проєкти', subjects:'Предмети'})[b.kind]||b.kind}</td><td class="ell">${b.file_name||'—'}</td>
       <td class="nw">${userLabel(d.usersBy[b.created_by])||'—'}</td>
       <td class="small">створено ${s.created||0} · доповнено ${s.updated||0} · пропущено ${s.skipped||0} · помилок ${s.errors||0}${b.rolled_back_at?html` <${Chip} c="red">скасовано<//>`:''}</td>
       <td class="nw" style="text-align:right"><button class="btn sm" onClick=${()=>report(b)}>Звіт</button> ${!b.rolled_back_at&&html`<button class="btn sm danger" onClick=${()=>rollback(b)}>Скасувати</button>`}</td></tr>`; })}</tbody></table>`}</div>`;
+}
+
+const ORG_FIELDS = [
+  {k:'org_name', l:'Назва (коротка)', ex:'БО «МБФ «СейвД»'}, {k:'org_full_name', l:'Повна назва', ex:'Благодійна організація «Міжнародний благодійний фонд «СейвД»»'},
+  {k:'org_edrpou', l:'Код ЄДРПОУ', half:true}, {k:'city', l:'Місто укладення договорів', half:true, ex:'м. Київ'},
+  {k:'org_address', l:'Адреса'}, {k:'org_iban', l:'IBAN', half:true}, {k:'org_bank', l:'Банк', half:true},
+  {k:'org_email', l:'E-mail', half:true}, {k:'org_phone', l:'Телефон', half:true},
+  {k:'org_signatory_position', l:'Посада підписанта (для підпису)', half:true, ex:'Директор'}, {k:'org_signatory_position_gen', l:'Посада в родовому відмінку', half:true, ex:'Директора'},
+  {k:'org_signatory_name_gen', l:'ПІБ підписанта в родовому відмінку', half:true, ex:'Іванової Марії Петрівни'}, {k:'org_signatory_short', l:'Підпис: Ім’я ПРІЗВИЩЕ', half:true, ex:'Марія ІВАНОВА'},
+  {k:'org_signatory_basis', l:'Діє на підставі', ex:'Статуту'},
+];
+const ORG_L = Object.fromEntries(ORG_FIELDS.map(f=>[f.k,f.l]));
+function OrgTab(){
+  const {role, d, reloadDicts} = useCtx(); const edit=can(role,'head');
+  const [r,setR]=useState(()=>({...(d.org||{})})); const [busy,setBusy]=useState(false);
+  const set=(k,v)=>setR(p=>({...p,[k]:v}));
+  const dirty=JSON.stringify(r)!==JSON.stringify(d.org||{});
+  const save=async()=>{ setBusy(true); const data=Object.fromEntries(Object.entries(r).map(([k,v])=>[k,String(v??'').trim()]).filter(([k,v])=>v!==''));
+    const {error}=await sb.from('org_settings').update({data, updated_at:new Date().toISOString()}).eq('id',1); setBusy(false);
+    if(error) return toastErr(error); pushToast('Реквізити збережено','ok'); reloadDicts(); };
+  const fld=f=>html`<${Field} key=${f.k} label=${f.l} hint=${'{{'+(({city:'contract_city', org_signatory_short:'org_sign'})[f.k]||f.k)+'}}'}><input value=${r[f.k]||''} placeholder=${f.ex||''} disabled=${!edit} onInput=${e=>set(f.k,e.target.value)}/><//>`;
+  const parts=[]; for(let i=0;i<ORG_FIELDS.length;i++){ const f=ORG_FIELDS[i], g=ORG_FIELDS[i+1];
+    if(f.half&&g&&g.half){ parts.push(html`<div class="row2" key=${f.k}>${fld(f)}${fld(g)}</div>`); i++; } else parts.push(fld(f)); }
+  return html`<div class="card pad" style="max-width:900px">
+    <p style="margin-bottom:14px">Реквізити підставляються в шаблони: ${'{{org_name}}'}, ${'{{org_details}}'} (блок реквізитів), ${'{{org_sign}}'} (підпис) тощо. ${edit?'':'Змінювати їх можуть адміністратор і керівник юридичного напряму.'}</p>
+    ${parts}
+    ${edit&&html`<button class="btn primary" onClick=${save} disabled=${busy||!dirty}>${busy?html`<${Spinner}/>`:'Зберегти'}</button>`}
+  </div>`;
 }
 
 render(html`<${cfgOk?App:NoConfig}/>`, document.getElementById('app'));
