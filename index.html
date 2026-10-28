@@ -163,7 +163,7 @@ import htm from 'https://esm.sh/htm@3.1.1';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
 
 const html = htm.bind(h);
-const APP_VERSION = '3.1 · масові договори · 28.10.2026';   // міняти при кожному оновленні: видно в меню і на екрані входу
+const APP_VERSION = '3.2 · масові договори · 29.10.2026';   // міняти при кожному оновленні: видно в меню і на екрані входу
 const CFG = window.APP_CONFIG || {};
 const cfgOk = !!(CFG.SUPABASE_URL && CFG.SUPABASE_ANON_KEY && !/ВАШ/.test(CFG.SUPABASE_URL + CFG.SUPABASE_ANON_KEY));
 const sb = cfgOk ? createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY) : null;
@@ -1009,7 +1009,10 @@ function highlightTags(root, classify){
 async function renderDocxPreview(el, bytes){
   const pv = await loadDocxPreview(), renderAsync = pv.renderAsync || (pv.default && pv.default.renderAsync);
   el.innerHTML = '';
-  await renderAsync(bytes, el, el, {className:'docx', inWrapper:true, ignoreWidth:false, ignoreHeight:true, breakPages:true, renderHeaders:true, renderFooters:true, renderFootnotes:true, useBase64URL:true});
+  // experimental — справжні табуляції (рядок «м. Київ … дата»): без нього табуляція = один широкий пробіл, і дата «їде» в середину
+  await renderAsync(bytes, el, el, {className:'docx', inWrapper:true, ignoreWidth:false, ignoreHeight:true, breakPages:true, renderHeaders:true, renderFooters:true, renderFootnotes:true, useBase64URL:true, experimental:true});
+  // ширини табуляцій docx-preview рахує через 500 мс — чекаємо, щоб масштаб перегляду (fit) не збив розрахунок
+  await new Promise(r=>setTimeout(r, 700));
 }
 
 /* ---- назви файлів версій ---- */
