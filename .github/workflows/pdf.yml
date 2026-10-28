@@ -1,1 +1,156 @@
+# ContractFlow: DOCX → PDF для Вчасно.
+# Файл має лежати в репозиторії legal_flow за шляхом .github/workflows/pdf.yml
+# Запускає його сервер ContractFlow (функція Supabase «contractflow»), коли в черзі є нові договори.
+# Доступ до бази — лише через функцію за коротким токеном GitHub (OIDC); жодних ключів у цьому файлі немає.
+name: ContractFlow — PDF
 
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: contractflow-pdf
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  pdf:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      CF_URL: https://fjoovdjaffbfpjzrohyw.supabase.co/functions/v1/contractflow
+      CF_APIKEY: sb_publishable_zi5ebYCPLyBN6mCwV6m36A_gW_XmIxv
+    steps:
+      - name: Шрифти Microsoft з кешу
+        id: fonts
+        uses: actions/cache@v4
+        with:
+          path: ~/.fonts
+          key: msfonts-v1
+
+      - name: LibreOffice
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends libreoffice-writer-nogui fonts-liberation fonts-crosextra-carlito fonts-crosextra-caladea > /dev/null
+
+      - name: Times New Roman та інші шрифти Microsoft
+        if: steps.fonts.outputs.cache-hit != 'true'
+        continue-on-error: true
+        timeout-minutes: 8
+        run: |
+          echo "ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula select true" | sudo debconf-set-selections
+          sudo apt-get install -y -qq ttf-mscorefonts-installer > /dev/null
+          mkdir -p ~/.fonts && cp /usr/share/fonts/truetype/msttcorefonts/*.ttf ~/.fonts/
+
+      - name: Конвертація
+        run: |
+          fc-cache -f > /dev/null
+          echo "Times New Roman: $(fc-list | grep -ci 'times new roman') файлів шрифту"
+          python3 - <<'PY'
+          # ---- CONVERTER START ----
+          import json, os, shutil, subprocess, time, urllib.request, urllib.error
+          from concurrent.futures import ThreadPoolExecutor
+          from pathlib import Path
+
+          CF = os.environ['CF_URL']
+          KEY = os.environ.get('CF_APIKEY', '')
+          BATCH = int(os.environ.get('CF_BATCH', '100'))
+          WORKERS = max(1, min(4, os.cpu_count() or 2))
+          SOFFICE = os.environ.get('SOFFICE', 'soffice')
+
+          def oidc():
+              # короткий токен GitHub (OIDC) — за ним функція перевіряє, що запит саме з цього репозиторію
+              req = urllib.request.Request(os.environ['ACTIONS_ID_TOKEN_REQUEST_URL'] + '&audience=contractflow',
+                                           headers={'Authorization': 'bearer ' + os.environ['ACTIONS_ID_TOKEN_REQUEST_TOKEN']})
+              with urllib.request.urlopen(req, timeout=30) as r:
+                  return json.load(r)['value']
+
+          def call(action, **payload):
+              data = json.dumps({'action': action, **payload}).encode()
+              for attempt in range(4):
+                  req = urllib.request.Request(CF, data=data, method='POST', headers={
+                      'Content-Type': 'application/json', 'Authorization': 'Bearer ' + oidc(), 'apikey': KEY})
+                  try:
+                      with urllib.request.urlopen(req, timeout=180) as r:
+                          return json.load(r)
+                  except urllib.error.HTTPError as e:
+                      body = e.read().decode('utf-8', 'replace')[:500]
+                      if e.code < 500 or attempt == 3:
+                          raise SystemExit(f'{action}: HTTP {e.code} {body}')
+                  except urllib.error.URLError as e:
+                      if attempt == 3:
+                          raise SystemExit(f'{action}: {e}')
+                  time.sleep(3 * (attempt + 1))
+
+          def fetch(url, dest):
+              for attempt in range(3):
+                  try:
+                      with urllib.request.urlopen(url, timeout=120) as r, open(dest, 'wb') as f:
+                          shutil.copyfileobj(r, f)
+                      return True
+                  except Exception:
+                      time.sleep(2)
+              return False
+
+          def put(url, path):
+              data = Path(path).read_bytes()
+              err = ''
+              for attempt in range(3):
+                  try:
+                      req = urllib.request.Request(url, data=data, method='PUT', headers={'Content-Type': 'application/pdf', 'x-upsert': 'true'})
+                      with urllib.request.urlopen(req, timeout=120) as r:
+                          r.read()
+                      return None
+                  except urllib.error.HTTPError as e:
+                      err = f'HTTP {e.code} {e.read()[:200].decode("utf-8", "replace")}'
+                  except Exception as e:
+                      err = str(e)
+                  time.sleep(2)
+              return 'Не вдалося зберегти PDF у сховищі: ' + err
+
+          def convert(k, files, out):
+              if not files:
+                  return
+              cmd = [SOFFICE, f'-env:UserInstallation=file:///tmp/lo_profile_{k}', '--headless', '--norestore',
+                     '--convert-to', 'pdf', '--outdir', str(out)] + [str(f) for f in files]
+              try:
+                  subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=120 + 30 * len(files))
+              except subprocess.TimeoutExpired:
+                  print('LibreOffice не встиг — частину документів буде позначено помилкою', flush=True)
+
+          total = ready = 0
+          while True:
+              jobs = call('pdf_claim', limit=BATCH).get('jobs', [])
+              if not jobs:
+                  break
+              work = Path('cf_work')
+              shutil.rmtree(work, ignore_errors=True)
+              (work / 'in').mkdir(parents=True)
+              (work / 'out').mkdir()
+              with ThreadPoolExecutor(8) as ex:
+                  got = list(ex.map(lambda j: fetch(j['docx_url'], work / 'in' / f"{j['id']}.docx"), jobs))
+              files = [work / 'in' / f"{j['id']}.docx" for j, g in zip(jobs, got) if g]
+              with ThreadPoolExecutor(WORKERS) as ex:
+                  list(ex.map(lambda k: convert(k, files[k::WORKERS], work / 'out'), range(WORKERS)))
+
+              def finish(pair):
+                  j, g = pair
+                  if not g:
+                      return {'id': j['id'], 'ok': False, 'error': 'Не вдалося отримати DOCX зі сховища'}
+                  pdf = work / 'out' / f"{j['id']}.pdf"
+                  if not pdf.exists() or pdf.stat().st_size == 0:
+                      return {'id': j['id'], 'ok': False, 'error': 'LibreOffice не зміг сконвертувати DOCX у PDF'}
+                  err = put(j['upload_url'], pdf)
+                  return {'id': j['id'], 'ok': err is None, 'path': j['path'], 'error': err}
+
+              with ThreadPoolExecutor(8) as ex:
+                  results = list(ex.map(finish, zip(jobs, got)))
+              r = call('pdf_done', results=results)
+              total += len(jobs)
+              ready += r.get('ok', 0)
+              print(f"Порція: {len(jobs)} документів, PDF готово {r.get('ok', 0)}, помилок {r.get('errors', 0)}", flush=True)
+          print(f'Разом: {total} документів, PDF готово: {ready}')
+          # ---- CONVERTER END ----
+          PY
