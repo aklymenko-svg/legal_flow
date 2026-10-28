@@ -163,7 +163,7 @@ import htm from 'https://esm.sh/htm@3.1.1';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
 
 const html = htm.bind(h);
-const APP_VERSION = '3.0 · масові договори · 28.10.2026';   // міняти при кожному оновленні: видно в меню і на екрані входу
+const APP_VERSION = '3.1 · масові договори · 28.10.2026';   // міняти при кожному оновленні: видно в меню і на екрані входу
 const CFG = window.APP_CONFIG || {};
 const cfgOk = !!(CFG.SUPABASE_URL && CFG.SUPABASE_ANON_KEY && !/ВАШ/.test(CFG.SUPABASE_URL + CFG.SUPABASE_ANON_KEY));
 const sb = cfgOk ? createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY) : null;
@@ -718,6 +718,9 @@ const TPL_FIELDS = [
   {k:'amount', g:1, l:'Сума цифрами: 15 000,00', get:d=>fmtAmountDoc(d.c.amount)},
   {k:'amount_words', g:1, l:'Сума прописом', get:d=>amountWordsUA(d.c.amount, d.c.currency_code)},
   {k:'amount_full', g:1, l:'15 000,00 грн (п’ятнадцять тисяч гривень 00 копійок)', get:d=>d.c.amount==null||d.c.amount===''?'':`${fmtAmountDoc(d.c.amount)} ${(CUR_DOC[d.c.currency_code]||{short:d.c.currency_code}).short} (${amountWordsUA(d.c.amount,d.c.currency_code)})`},
+  {k:'rate', g:1, l:'Ставка за годину / день: 170,00', a:['hourly_rate'], get:d=>d.c.rate==null||d.c.rate===''?'':fmtAmountDoc(d.c.rate)},
+  {k:'rate_words', g:1, l:'Ставка прописом: сто сімдесят гривень 00 копійок', get:d=>d.c.rate==null||d.c.rate===''?'':amountWordsUA(d.c.rate,'UAH')},
+  {k:'rate_full', g:1, l:'Ставка: 170,00 грн (сто сімдесят гривень 00 копійок)', get:d=>d.c.rate==null||d.c.rate===''?'':`${fmtAmountDoc(d.c.rate)} грн (${amountWordsUA(d.c.rate,'UAH')})`},
   {k:'currency', g:1, l:'Валюта: грн / дол. США / євро', get:d=>(CUR_DOC[d.c.currency_code]||{short:d.c.currency_code||''}).short},
   {k:'currency_code', g:1, l:'Код валюти: UAH', get:d=>d.c.currency_code},
   {k:'amount_type', g:1, l:'Тип суми: фіксована / гранична', get:d=>AMOUNT_DOC[d.c.amount_type]},
@@ -757,6 +760,7 @@ const TPL_FIELDS = [
   {k:'org_edrpou', g:3, l:'Код ЄДРПОУ Фонду', get:d=>d.org.org_edrpou},
   {k:'org_address', g:3, l:'Адреса Фонду', get:d=>d.org.org_address},
   {k:'org_iban', g:3, l:'IBAN Фонду', get:d=>d.org.org_iban},
+  {k:'project_iban', g:3, l:'IBAN Фонду для проєкту (з Excel; якщо немає — з реквізитів Фонду)', a:['fund_iban'], get:d=>d.c.fund_iban||d.org.org_iban},
   {k:'org_bank', g:3, l:'Банк Фонду', get:d=>d.org.org_bank},
   {k:'org_email', g:3, l:'E-mail Фонду', get:d=>d.org.org_email},
   {k:'org_phone', g:3, l:'Телефон Фонду', get:d=>d.org.org_phone},
@@ -1033,7 +1037,7 @@ function sampleContext(o={}){
   const d0 = today();
   return docContext({contract:{number:'S001-UNICEF#3-1', contract_date:d0, start_date:d0, end_date:addDays(d0, 90), title:'Надання послуг тьютора',
       subject:'Виконавець зобов’язується надати послуги тьютора з підтримки навчання дітей.\nПослуги надаються відповідно до плану, погодженого з Замовником.',
-      amount:15000, currency_code:'UAH', amount_type:'fixed', indefinite:false, worksection_url:'https://worksection.com/project/1/',
+      amount:15000, currency_code:'UAH', amount_type:'fixed', indefinite:false, worksection_url:'https://worksection.com/project/1/', rate:170, fund_iban:'UA213223130000026007233566001',
       project_id:project?project.id:null, type_id:typeId||null},
     cp, lf, project:project||{short_code:'UNICEF#3', full_name:'UNICEF SBC 3', donor:'UNICEF'}, org:org||{}, clauses:clauses||[],
     typeName:typeName||'Надання послуг', lawyerName:'Марія Іваненко', subj:{name:'Тьютор SBC', role_title:'тьютор', body:''}});
@@ -2195,31 +2199,40 @@ function DocCard({c, files, onTab}){
 
 /* ---------------- Масові пакети: Excel → договори → PDF → Вчасно → реєстр ---------------- */
 // колонки Excel пакета (k — поле в рядку, яке зберігається в mass_docs.data)
+// syn — назви колонок, які підхоплюються автоматично; no — слова, з якими колонка цьому полю не підходить
 const MASS_COLS = [
-  {k:'number', l:'Номер договору', req:true, syn:['номер','номер договору','№','№ договору','no','number','номер дог'], ex:'T-001'},
-  {k:'name', l:'ПІБ / Назва', req:true, syn:['піб','прізвище ім’я по батькові','прізвище імя по батькові','виконавець','назва','найменування','контрагент','name'], ex:'Коваленко Олена Петрівна'},
-  {k:'tax_id', l:'РНОКПП / ЄДРПОУ', req:true, syn:['рнокпп','іпн','єдрпоу','код','ідентифікаційний код','податковий номер','рнокпп єдрпоу','tax id'], ex:'3456789120'},
+  {k:'number', l:'Номер договору', req:true, syn:['номер','номер договору','№','№ договору','no','number','номер дог'], no:['з п','п п'], ex:'T-001'},
+  {k:'name', l:'ПІБ / Назва', req:true, syn:['піб','прізвище ім’я по батькові','прізвище імя по батькові','виконавець','назва','найменування','контрагент','name','назва контрагента','піб виконавця','піб контрагента'], no:['договор','проєкт','банк'], ex:'Коваленко Олена Петрівна'},
+  {k:'tax_id', l:'РНОКПП / ЄДРПОУ', req:true, syn:['рнокпп','іпн','єдрпоу','едрпоу','код','ідентифікаційний код','ідент код','податковий номер','рнокпп єдрпоу','tax id'], no:['проєкт','фонд','банк','мфо'], ex:'3456789120'},
   {k:'email', l:'Email', syn:['email','e-mail','електронна пошта','ел пошта','пошта','e mail'], ex:'olena@example.com'},
   {k:'phone', l:'Телефон', syn:['телефон','тел','phone','контакти','мобільний'], ex:'+380501234567'},
   {k:'address', l:'Адреса', syn:['адреса','адреса реєстрації','місце проживання','address'], ex:'м. Львів, вул. Городоцька, 112, кв. 7'},
-  {k:'iban', l:'IBAN', syn:['iban','рахунок','р р','розрахунковий рахунок','номер рахунку'], ex:'UA213223130000026007233566001'},
-  {k:'bank_name', l:'Банк', syn:['банк','назва банку','bank'], ex:'АТ КБ «ПриватБанк»'},
-  {k:'fop_registration', l:'Запис в ЄДР (ФОП)', syn:['запис в єдр','дата і номер запису в єдр','запис','реєстрація фоп','єдр','номер запису'], ex:'№ 2004150000001234 від 15.04.2021'},
+  {k:'iban', l:'IBAN', syn:['iban','рахунок','р р','розрахунковий рахунок','номер рахунку'], no:['проєкт','фонд','замовник'], ex:'UA213223130000026007233566001'},
+  {k:'bank_name', l:'Банк', syn:['банк','назва банку','bank'], no:['рахун','iban'], ex:'АТ КБ «ПриватБанк»'},
+  {k:'fop_registration', l:'Запис в ЄДР (ФОП)', syn:['запис в єдр','дата і номер запису в єдр','дата та номер запису в єдр','запис','реєстрація фоп','єдр'], no:['дата реєстрації','дата запису'], ex:'№ 2004150000001234 від 15.04.2021'},
+  // Excel Фонду: номер і дата запису в ЄДР — окремими колонками; сервіс сам складе «№ … від …»
+  {k:'fop_reg_no', l:'№ запису в ЄДР', fop:true, syn:['номер запису в єдр','номер запису','запису в єдр','№ запису','номер запису єдр','номер в єдр','реєстраційний номер фоп'], no:['дата'], ex:'2004150000001234'},
+  {k:'fop_reg_date', l:'Дата запису в ЄДР', fop:true, syn:['дата реєстрації фоп','дата реєстрації','дата запису','дата запису в єдр','дата державної реєстрації','дата реєстрації в єдр'], ex:'15.04.2021', date:true},
   {k:'passport', l:'Паспорт / ID-картка', syn:['паспорт','паспортні дані','id картка','id-картка','документ','паспорт id картка'], ex:'ID-картка № 004567891, орган 6310, 12.03.2019'},
-  {k:'contract_date', l:'Дата договору', syn:['дата договору','дата','дата укладення'], ex:'01.11.2026', date:true},
-  {k:'start_date', l:'Початок', syn:['початок','дата початку','з','початок дії'], ex:'01.11.2026', date:true},
-  {k:'end_date', l:'Завершення', syn:['завершення','кінець','дата завершення','по','до','кінець дії'], ex:'31.12.2026', date:true},
-  {k:'amount', l:'Сума, грн', syn:['сума','сума грн','вартість','amount'], ex:'15000'},
+  {k:'contract_date', l:'Дата договору', syn:['дата договору','дата','дата укладення'], no:['реєстрац','запис','початк','закінч','заверш','народж','видач'], ex:'01.11.2026', date:true},
+  {k:'start_date', l:'Початок', syn:['початок','дата початку','з','початок дії','дата початку дії'], ex:'01.11.2026', date:true},
+  {k:'end_date', l:'Завершення', syn:['завершення','кінець','дата завершення','по','до','кінець дії','дата закінчення','закінчення','дата закінчення дії','дата завершення дії','кінцева дата'], ex:'31.12.2026', date:true},
+  {k:'amount', l:'Сума договору, грн', syn:['сума','сума грн','вартість','amount','сума договору','загальна сума'], no:['за годину','за день','за заняття','за місяць','за одиницю'], ex:'15000'},
+  {k:'rate', l:'Ставка (за годину / день), грн', syn:['ставка','ставка за годину','сума за годину','вартість години','вартість однієї години','ціна за годину','погодинна ставка','ставка за день','сума за день','вартість дня','вартість одного дня','сума за заняття','вартість заняття','за годину','за день','за заняття'], ex:'170'},
+  {k:'fund_iban', l:'IBAN Фонду (рахунок проєкту)', syn:['банківський рахунок проєкту','рахунок проєкту','iban проєкту','рахунок фонду','iban фонду','рахунок замовника','iban замовника','банківський рахунок фонду'], ex:'UA213223130000026007233566001'},
   {k:'extra1', l:'Додаткове поле 1', syn:['додаткове поле 1','додаткове 1','поле 1','extra1'], ex:''},
   {k:'extra2', l:'Додаткове поле 2', syn:['додаткове поле 2','додаткове 2','поле 2','extra2'], ex:''},
   {k:'extra3', l:'Додаткове поле 3', syn:['додаткове поле 3','додаткове 3','поле 3','extra3'], ex:''},
 ];
 const MASS_COL = Object.fromEntries(MASS_COLS.map(c=>[c.k,c]));
+// для автозіставлення вужчі поля йдуть першими, щоб загальні («Банк», «Дата», «Сума») не забрали їхні колонки
+const MASS_AUTO = ['fund_iban','rate','fop_reg_date','fop_reg_no'];
+const MASS_COLS_AUTO = [...MASS_AUTO.map(k=>MASS_COL[k]), ...MASS_COLS.filter(c=>!MASS_AUTO.includes(c.k))];
 // яке поле шаблону бере дані з якої колонки Excel
 const FIELD_COL = {contract_number:'number', contractor_name:'name', contractor_pib:'name', contractor_sign:'name', contractor_surname_first:'name',
   contractor_citizen:'name', contractor_name_latin:'name', tax_id:'tax_id', tax_id_label:'tax_id', contractor_address:'address', contractor_iban:'iban',
   contractor_bank:'bank_name', contractor_email:'email', contractor_phone:'phone', fop_registration:'fop_registration', contractor_passport:'passport',
-  amount:'amount', amount_words:'amount', amount_full:'amount', contract_date:'contract_date', contract_date_text:'contract_date', contract_date_full:'contract_date',
+  amount:'amount', amount_words:'amount', amount_full:'amount', rate:'rate', rate_words:'rate', rate_full:'rate', contract_date:'contract_date', contract_date_text:'contract_date', contract_date_full:'contract_date',
   start_date:'start_date', start_date_text:'start_date', start_date_full:'start_date', end_date:'end_date', end_date_text:'end_date', end_date_full:'end_date',
   term_text:'end_date', extra1:'extra1', extra2:'extra2', extra3:'extra3'};
 const tplMap = (tv, name) => (tv.mapping||{})[name] || autoMapTag(name, []);
@@ -2229,6 +2242,13 @@ function tplNeeds(tv){
     const m = tplMap(tv, p.name); if(m && m.type==='field' && FIELD_COL[m.field]) need.add(FIELD_COL[m.field]);
     if(m && m.type==='field' && m.field==='contractor_details'){ ['address','iban'].forEach(x=>need.add(x)); } }
   return need;
+}
+// поля, що беруть дані з Excel, але мають запасне значення (IBAN Фонду — з реквізитів): колонку показуємо, та не вимагаємо
+const FIELD_SOFT = {project_iban:'fund_iban'};
+function tplSoft(tv){
+  const s = new Set();
+  for(const p of tv.placeholders||[]){ if(p.prefix==='/'||p.prefix==='#'||p.prefix==='^') continue; const m = tplMap(tv, p.name); if(m && m.type==='field' && FIELD_SOFT[m.field]) s.add(FIELD_SOFT[m.field]); }
+  return s;
 }
 const tplNeedsGender = tv => (tv.placeholders||[]).some(p=>p.name==='is_female' || (p.prefix==='' && (m=>m&&m.type==='field'&&m.field==='contractor_citizen')(tplMap(tv,p.name))));
 
@@ -2264,7 +2284,8 @@ function massDocCtx(doc, env){
   const x = doc.data || {}, kind = doc.cp_kind || (String(doc.tax_id||'').length===8 ? 'company' : 'person');
   return docContext({
     contract:{number:doc.number, contract_date:doc.contract_date, start_date:doc.start_date, end_date:doc.end_date, amount:doc.amount, currency_code:'UAH',
-      amount_type:doc.amount!=null?'fixed':'none', indefinite:false, project_id:env.pkg.project_id, type_id:env.typeId, extra1:x.extra1, extra2:x.extra2, extra3:x.extra3},
+      amount_type:doc.amount!=null?'fixed':'none', indefinite:false, project_id:env.pkg.project_id, type_id:env.typeId, extra1:x.extra1, extra2:x.extra2, extra3:x.extra3,
+      rate:x.rate, fund_iban:x.fund_iban},
     cp:{name:doc.cp_name, tax_id:doc.tax_id, email:doc.email, phone:x.phone, address:x.address, iban:x.iban, bank_name:x.bank_name, passport:x.passport,
       fop_registration:x.fop_registration, name_latin:x.name_latin || translitUA(personName(doc.cp_name))},
     lf: kind==='fop' ? env.forms.fop : kind==='person' ? env.forms.person : null,
@@ -2311,6 +2332,7 @@ const MASS_EXPORT_COLS = [
   {l:'№ договору', x:r=>r.number}, {l:'Дата договору', x:r=>fmtDate(r.contract_date)}, {l:'Контрагент', x:r=>r.cp_name}, {l:'РНОКПП / ЄДРПОУ', x:r=>r.tax_id||''},
   {l:'Email', x:r=>r.email||''}, {l:'Пакет', x:r=>r.package_name||''}, {l:'Шаблон', x:r=>r.template_name?r.template_name+' v'+r.template_version_no:''}, {l:'Проєкт', x:r=>r.project_code||r.project_name||''},
   {l:'Початок', x:r=>fmtDate(r.start_date)}, {l:'Завершення', x:r=>fmtDate(r.end_date)}, {l:'Сума', x:r=>r.amount==null?'':Number(r.amount)},
+  {l:'Ставка', x:r=>r.data&&r.data.rate!=null&&r.data.rate!==''?Number(r.data.rate):''},
   {l:'Етап', x:r=>(STAGE[r.stage]||{}).l||r.stage}, {l:'Статус у Вчасно', x:r=>r.vchasno_status?(VCH_ST[r.vchasno_status]||r.vchasno_status_text||String(r.vchasno_status)):''},
   {l:'Надіслано у Вчасно', x:r=>fmtTs(r.vchasno_uploaded_at)}, {l:'Хто надіслав', x:r=>r.uploaded_by_name||''}, {l:'Підписано', x:r=>fmtTs(r.signed_at)},
   {l:'Посилання у Вчасно', x:r=>r.vchasno_url||''}, {l:'Помилка', x:r=>r.vchasno_error||r.pdf_error||''}, {l:'Скасування', x:r=>r.cancelled_at?fmtTs(r.cancelled_at)+' — '+(r.cancel_reason||''):''},
@@ -2367,15 +2389,20 @@ function MassWizard({pkg, onClose, onCreated}){
     .then(({data,error})=>{ if(error) toastErr(error); setTpls(data||[]); }); },[]);
   const tsel = (tpls||[]).find(t=>t.template_versions[0].id===r.tv) || null;
   const tv = tsel ? tsel.template_versions[0] : null;
-  const needs = tv ? tplNeeds(tv) : new Set(['number','name','tax_id']);
+  const needs = tv ? tplNeeds(tv) : new Set(['number','name','tax_id']), soft = tv ? tplSoft(tv) : new Set();
   const kind = tsel ? tsel.cp_kind : 'any';
   const headers = aoa ? (aoa[hdr]||[]).map(x=>String(x??'').trim()) : [];
-  const colReq = c => c.req || (needs.has(c.k) && !(c.date && r[c.k]));
-  const sample = () => { const cols=MASS_COLS.filter(c=>c.req||needs.has(c.k)||c.k==='email'); exportRows([Object.fromEntries(cols.map(c=>[c.k,c.ex]))], cols.map(c=>({l:c.l, x:x=>x[c.k]})), 'Excel для пакета — '+(tsel?tsel.name:'шаблон'), 'xlsx'); };
+  const colReq = c => c.req || (needs.has(c.k) && !(c.date && r[c.k]) && !(c.k==='fop_registration' && map.fop_reg_no!=null));
+  // на кроці 2 одразу видно потрібні й знайдені колонки; решта — під «Інші колонки»
+  const colShown = c => colReq(c) || needs.has(c.k) || soft.has(c.k) || map[c.k]!=null || ['email','phone','address','iban'].includes(c.k) || (c.fop && needs.has('fop_registration'));
+  const colHint = c => c.date && r[c.k] && map[c.k]==null ? 'буде '+fmtDate(r[c.k])+' (з кроку 1)'
+    : c.k==='fop_registration' && map[c.k]==null && map.fop_reg_no!=null ? 'складеться з колонок «№ запису» і «Дата запису»'
+    : c.k==='fund_iban' && map[c.k]==null ? 'не обрано — візьметься IBAN із реквізитів Фонду' : '';
+  const sample = () => { const cols=MASS_COLS.filter(c=>c.req||needs.has(c.k)||soft.has(c.k)||c.k==='email'); exportRows([Object.fromEntries(cols.map(c=>[c.k,c.ex]))], cols.map(c=>({l:c.l, x:x=>x[c.k]})), 'Excel для пакета — '+(tsel?tsel.name:'шаблон'), 'xlsx'); };
   const onFile = async e => { const f=e.target.files[0]; e.target.value=''; if(!f) return; setBusy(true);
     try{ const X=await loadXLSX(); const wb=X.read(await f.arrayBuffer(), {cellDates:true}); const ws=wb.Sheets[wb.SheetNames[0]];
       const a=X.utils.sheet_to_json(ws, {header:1, raw:true, defval:''}); const hr=Math.max(0, a.findIndex(x=>x.filter(c=>String(c??'').trim()!=='').length>=2));
-      setFile(f); setAoa(a); setHdr(hr); setMap(autoMap((a[hr]||[]).map(x=>String(x??'')), MASS_COLS)); setRows(null);
+      setFile(f); setAoa(a); setHdr(hr); setMap(autoMap((a[hr]||[]).map(x=>String(x??'')), MASS_COLS_AUTO)); setRows(null);
     } catch(err){ pushToast('Не вдалося прочитати файл: '+errText(err),'err'); }
     setBusy(false); };
   const next1 = () => {
@@ -2390,7 +2417,11 @@ function MassWizard({pkg, onClose, onCreated}){
     setBusy(true); setProgress('Перевіряю…');
     try{
       const body = aoa.slice(hdr+1).map((cells,i)=>({row:hdr+2+i, cells})).filter(x=>x.cells.some(c=>String(c??'').trim()!==''));
-      const out = body.map(({row,cells})=>{ const data={}; MASS_COLS.forEach(c=>{ if(map[c.k]!=null) data[c.k]=cellStr(cells[map[c.k]], c.k); }); return {row, data, errs:[], warns:[]}; });
+      const out = body.map(({row,cells})=>{ const data={}; MASS_COLS.forEach(c=>{ if(map[c.k]!=null) data[c.k]=cellStr(cells[map[c.k]], c.k); });
+        const x={row, data, errs:[], warns:[]}, reg=map.fop_reg_no!=null ? cells[map.fop_reg_no] : null;
+        // Excel тримає в числі лише 15 значущих цифр — довгий номер запису в ЄДР уже зіпсовано
+        if(typeof reg==='number' && reg>=1e15) x.errs.push('№ запису в ЄДР Excel зберіг як число й загубив останні цифри: зробіть колонку текстовою і впишіть номер заново');
+        return x; });
       await validateMassRows(out, {needs, gender:tv?tplNeedsGender(tv):false, kind, defaults:r});
       setRows(out); setStep(3);
     } catch(e){ toastErr(e); }
@@ -2447,11 +2478,11 @@ function MassWizard({pkg, onClose, onCreated}){
     </div>`}
     ${step===2&&html`<div>
       <p style="margin-bottom:12px">Рядок із назвами колонок: ${hdr+1}. Позначені <span class="req">*</span> — потрібні для цього шаблону.</p>
-      <div class="row3">${MASS_COLS.filter(c=>colReq(c)||needs.has(c.k)||map[c.k]!=null||['email','phone','address','iban'].includes(c.k)).map(c=>html`<${Field} key=${c.k} label=${c.l} req=${colReq(c)} hint=${c.date&&r[c.k]&&map[c.k]==null?'буде '+fmtDate(r[c.k])+' (з кроку 1)':''}>
+      <div class="row3">${MASS_COLS.filter(colShown).map(c=>html`<${Field} key=${c.k} label=${c.l} req=${colReq(c)} hint=${colHint(c)}>
         <select value=${map[c.k]==null?'':String(map[c.k])} onChange=${e=>setMap({...map,[c.k]:e.target.value===''?null:Number(e.target.value)})}>
           <option value="">— немає —</option>${headers.map((h2,i)=>h2?html`<option value=${String(i)}>${h2}</option>`:'')}</select><//>`)}</div>
       <details style="margin-top:6px"><summary class="small muted" style="cursor:pointer">Інші колонки (додаткові поля)</summary>
-        <div class="row3" style="margin-top:10px">${MASS_COLS.filter(c=>!(colReq(c)||needs.has(c.k)||map[c.k]!=null||['email','phone','address','iban'].includes(c.k))).map(c=>html`<${Field} key=${c.k} label=${c.l}>
+        <div class="row3" style="margin-top:10px">${MASS_COLS.filter(c=>!colShown(c)).map(c=>html`<${Field} key=${c.k} label=${c.l}>
           <select value=${map[c.k]==null?'':String(map[c.k])} onChange=${e=>setMap({...map,[c.k]:e.target.value===''?null:Number(e.target.value)})}>
             <option value="">— немає —</option>${headers.map((h2,i)=>h2?html`<option value=${String(i)}>${h2}</option>`:'')}</select><//>`)}</div></details>
     </div>`}
@@ -2476,8 +2507,20 @@ function MassWizard({pkg, onClose, onCreated}){
 async function validateMassRows(out, {needs, gender, kind, defaults}){
   const seenNum={}, seenTax={};
   out.forEach(x=>{ const v=x.data;
-    v.number=String(v.number||'').trim(); v.name=String(v.name||'').replace(/\s+/g,' ').trim(); v.tax_id=String(v.tax_id||'').replace(/\s/g,'');
+    // «№01112026-…» → «01112026-…»: знак № уже є в шаблоні й у назві для Вчасно
+    v.number=String(v.number||'').trim().replace(/^№\s*/,'').trim(); v.name=String(v.name||'').replace(/\s+/g,' ').trim(); v.tax_id=String(v.tax_id||'').replace(/\s/g,'');
     v.email=String(v.email||'').trim().toLowerCase(); v.iban=String(v.iban||'').replace(/\s/g,'').toUpperCase();
+    // переноси рядків у клітинці Excel не мають ламати речення в договорі
+    ['address','bank_name','passport','fop_registration','fop_reg_no','phone','rate','fund_iban'].forEach(k=>{ if(v[k]!=null) v[k]=String(v[k]).replace(/\s+/g,' ').trim(); });
+    if(v.phone){ const dg=v.phone.replace(/[^\d+]/g,''); if(/^380\d{9}$/.test(dg)) v.phone='+'+dg; else if(/^0\d{9}$/.test(dg)) v.phone='+38'+dg; else if(/^\d{9}$/.test(dg)) v.phone='+380'+dg; }
+    // запис в ЄДР двома колонками (номер + дата) → «№ … від дд.мм.рррр»
+    let regDate='';
+    if(v.fop_reg_date){ const p=parseDate(v.fop_reg_date); if(p.err) x.errs.push('Дата запису в ЄДР: '+p.err); else { v.fop_reg_date=p.v; regDate=p.v; } }
+    if(v.fop_reg_no){ v.fop_reg_no=v.fop_reg_no.replace(/^№\s*/,'').trim(); const whole=/\sвід\s/.test(v.fop_reg_no);
+      if(!v.fop_registration) v.fop_registration='№ '+v.fop_reg_no+(regDate&&!whole?' від '+fmtDate(regDate):'');
+      if(!regDate && !whole && needs.has('fop_registration')) x.warns.push('немає дати запису в ЄДР — у договорі буде лише номер'); }
+    if(v.rate){ const n=normNum(v.rate); if(n==null||n<0) x.errs.push('ставка: незрозуміле число «'+v.rate+'»'); else v.rate=String(n); }
+    if(v.fund_iban){ v.fund_iban=v.fund_iban.replace(/\s/g,'').toUpperCase(); if(!checkIban(v.fund_iban)) x.errs.push('IBAN Фонду: контрольна сума не збігається'); }
     if(!v.number) x.errs.push('немає номера договору');
     else if(seenNum[v.number.toUpperCase()]) x.errs.push('номер повторюється (рядок '+seenNum[v.number.toUpperCase()]+')'); else seenNum[v.number.toUpperCase()]=x.row;
     if(!v.name) x.errs.push('немає ПІБ / назви');
@@ -2641,6 +2684,7 @@ function MassDocModal({r, p, onClose, onChanged}){
   const x=r.data||{};
   const kv=[['Номер',r.number],['ПІБ / Назва',r.cp_name],['РНОКПП / ЄДРПОУ',r.tax_id],['Вид',KIND_L[r.cp_kind]],['Email',r.email],['Телефон',x.phone],['Адреса',x.address],['IBAN',x.iban],['Банк',x.bank_name],
     ['Запис в ЄДР',x.fop_registration],['Паспорт / ID',x.passport],['Дата договору',fmtDate(r.contract_date)],['Строк',(fmtDate(r.start_date)||'—')+' – '+(fmtDate(r.end_date)||'—')],['Сума',r.amount!=null?fmtMoney(r.amount)+' грн':''],
+    ['Ставка',x.rate!=null&&x.rate!==''?fmtMoney(x.rate)+' грн':''],['IBAN Фонду',x.fund_iban],
     ['Додаткові поля',[x.extra1,x.extra2,x.extra3].filter(Boolean).join(' · ')],['Рядок Excel',r.src_row]].filter(([k,v])=>v!=null&&v!=='');
   const canDelV = r.vchasno_id && [7000,7001].includes(r.vchasno_status);
   return html`<${Modal} xwide=${true} title=${'Договір '+r.number} sub=${r.cp_name+' • '+stageText(r)} onClose=${busy?null:onClose}
@@ -2674,12 +2718,16 @@ function MassDocModal({r, p, onClose, onChanged}){
 function MassDocEdit({r, onClose, onSaved}){
   const x=r.data||{};
   const [v,setV]=useState({number:r.number, name:personName(r.cp_name)===r.cp_name||r.cp_kind!=='fop'?r.cp_name:personName(r.cp_name), tax_id:r.tax_id||'', email:r.email||'', phone:x.phone||'', address:x.address||'', iban:x.iban||'', bank_name:x.bank_name||'',
-    fop_registration:x.fop_registration||'', passport:x.passport||'', contract_date:r.contract_date||'', start_date:r.start_date||'', end_date:r.end_date||'', amount:r.amount??'', extra1:x.extra1||'', extra2:x.extra2||'', extra3:x.extra3||''});
+    fop_registration:x.fop_registration||'', passport:x.passport||'', contract_date:r.contract_date||'', start_date:r.start_date||'', end_date:r.end_date||'', amount:r.amount??'', extra1:x.extra1||'', extra2:x.extra2||'', extra3:x.extra3||'',
+    rate:x.rate??'', fund_iban:x.fund_iban||''});
   const [busy,setBusy]=useState(false); const set=(k,val)=>setV(p=>({...p,[k]:val}));
   const save=async()=>{ const iss=taxIdIssue(v.tax_id, r.cp_kind!=='company'); if(iss&&iss.error) return pushToast('Код: '+iss.error,'err');
     if(v.iban && !checkIban(v.iban)) return pushToast('IBAN: контрольна сума не збігається','err'); if(v.email && !checkEmail(v.email)) return pushToast('Email некоректний','err');
+    const fundIban=String(v.fund_iban||'').replace(/\s/g,'').toUpperCase(); if(fundIban && !checkIban(fundIban)) return pushToast('IBAN Фонду: контрольна сума не збігається','err');
+    const rate=String(v.rate)===''?'':normNum(v.rate); if(rate===null||rate<0) return pushToast('Ставка: незрозуміле число','err');
     setBusy(true); const amount=v.amount===''?'':String(normNum(v.amount)??'');
-    const {error}=await sb.rpc('mass_update_doc',{p_doc:r.id, p:{...v, amount, iban:v.iban.replace(/\s/g,'').toUpperCase(), name_latin:translitUA(personName(v.name))}}); setBusy(false);
+    const {error}=await sb.rpc('mass_update_doc',{p_doc:r.id, p:{...v, number:String(v.number||'').trim().replace(/^№\s*/,''), amount, rate:rate===''?'':String(rate), fund_iban:fundIban,
+      iban:v.iban.replace(/\s/g,'').toUpperCase(), name_latin:translitUA(personName(v.name))}}); setBusy(false);
     if(error) return toastErr(error); pushToast('Збережено. Сформуйте договір знову — кнопка «Сформувати договори» на сторінці пакета','ok'); onSaved(); };
   const f=(k,l,type)=>html`<${Field} label=${l}><input type=${type||'text'} value=${v[k]} onInput=${e=>set(k,e.target.value)}/><//>`;
   return html`<${Modal} wide=${true} title=${'Виправити дані: '+r.number} sub="Документ буде скинуто — його треба сформувати знову" onClose=${onClose}
@@ -2690,7 +2738,8 @@ function MassDocEdit({r, onClose, onSaved}){
     ${f('address','Адреса')}
     <div class="row2">${f('fop_registration','Запис в ЄДР (ФОП)')}${f('passport','Паспорт / ID-картка')}</div>
     <div class="row3">${f('contract_date','Дата договору','date')}${f('start_date','Початок','date')}${f('end_date','Завершення','date')}</div>
-    <div class="row3">${f('amount','Сума, грн')}${f('extra1','Додаткове поле 1')}${f('extra2','Додаткове поле 2')}</div>
+    <div class="row3">${f('amount','Сума договору, грн')}${f('rate','Ставка, грн')}${f('fund_iban','IBAN Фонду (рахунок проєкту)')}</div>
+    <div class="row3">${f('extra1','Додаткове поле 1')}${f('extra2','Додаткове поле 2')}${f('extra3','Додаткове поле 3')}</div>
   <//>`;
 }
 
@@ -3214,10 +3263,14 @@ const normH = s => fold(String(s||'')).replace(/[^\p{L}\p{N}#]+/gu,' ').trim();
 function autoMap(headers, fields){
   const map={}, used=new Set(), H=headers.map(normH);
   fields.forEach(f=>{ const cands=[f.l,...f.syn].map(normH); const i=H.findIndex((h,j)=>!used.has(j)&&h&&cands.includes(h)); if(i>=0){ map[f.k]=i; used.add(i); } });
-  fields.forEach(f=>{ if(map[f.k]!=null) return; const cands=f.syn.map(normH).filter(s=>s.length>2); const i=H.findIndex((h,j)=>!used.has(j)&&h&&cands.some(s=>h.includes(s))); if(i>=0){ map[f.k]=i; used.add(i); } });
+  // друге коло — за входженням слова; f.no — слова, з якими колонка цьому полю не підходить («Банківський рахунок проєкту» ≠ «Банк»)
+  fields.forEach(f=>{ if(map[f.k]!=null) return; const cands=f.syn.map(normH).filter(s=>s.length>2), no=(f.no||[]).map(normH);
+    const i=H.findIndex((h,j)=>!used.has(j)&&h&&cands.some(s=>h.includes(s))&&!no.some(s=>h.includes(s))); if(i>=0){ map[f.k]=i; used.add(i); } });
   return map;
 }
-const isoLocal = d => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12).toISOString().slice(0,10);
+// дата з клітинки Excel. SheetJS рахує від 1899 року з тодішнім місцевим часом, тож у Києві 01.11.2026 приходить як 31.10.2026 23:59:56 —
+// округлюємо місцевий час до години, і лише тоді беремо день
+const isoLocal = d => { const t = d.getTime() - d.getTimezoneOffset()*60000; return new Date(Math.round(t/3600000)*3600000).toISOString().slice(0,10); };
 function cellStr(v, k){
   if(v==null) return '';
   if(v instanceof Date) return isNaN(v) ? '' : isoLocal(v);
